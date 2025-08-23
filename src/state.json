@@ -1,0 +1,359 @@
+{
+"$whitespace": ["\t", "\n", "\r", " "],
+"$newline": ["\n", "\r"],
+"$0-9": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+"$1-9": ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+"$hex_digit": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                  "a", "b", "c", "d", "e", "f",
+                  "A", "B", "C", "D", "E", "F"],
+"$exponent": ["e", "E"],
+"$exponent_prefix": ["+", "-"],
+"$single_char_escapes": ["\"", "\\", "/", "b", "f", "n", "r", "t"],
+"$high_surrogate_2": ["8", "9", "a", "b", "A", "B"],
+"$low_surrogate_2": ["c", "d", "e", "f", "C", "D", "E", "F"],
+
+
+"whitespace": {
+        "$whitespace": "whitespace",
+        "/": [{"ifconfig": "comments"}, "comment_leader", {"popstate": ""}],
+        "???": {"popstate": ""}
+},
+
+"comment_leader": {
+        "*": "block_comment",
+        "/": "line_comment",
+        "...": "whitespace"
+},
+
+"block_comment": {
+        "*": "uncomment_leader",
+        "...": "block_comment"
+},
+
+"uncomment_leader": {
+        "/": "whitespace",
+        "...": "block_comment"
+},
+
+"line_comment": {
+        "$newline": "whitespace",
+        "...": "line_comment"
+},
+
+"value": {
+        "???":  [{"pushstate": "w_value"}, "whitespace"]
+},
+
+"w_value": {
+        "n": [{"push": "null"}, "null_2"],
+        "t": [{"push": "true"}, "true_2"],
+        "f": [{"push": "false"}, "false_2"],
+        "-": [{"push": "integer"}, "minus"],
+        "0": [{"push": "integer"}, "zero_integer"],
+        "$1-9": [{"push": "integer"}, "integer"],
+        "\"": [{"push": "string"}, "string" ],
+        "'": [{"ifconfig": "single_quotes"}, "single_quote_string"],
+        "{": [ {"push": "object"}, "value_or_close" ],
+        "[": [ {"push": "array"}, "value_or_close" ],
+        "???": [{"ifconfig": "unquoted_strings"}, "no_quote_string"]
+},
+
+"no_quote_string": {
+        "???": [{"push": "nq_string"}, "nq_string"] 
+},
+
+"single_quote_string": {
+        "???": [{"push": "sq_string"}, "sq_string"]
+},
+
+"key": {
+        "???":  [{"pushstate": "w_key"}, "whitespace"]
+},
+
+"w_key": {
+        "\"": [{"push": "key"}, "string" ],
+        "'": [{"ifconfig": "single_quotes"}, "single_quote_key"],
+        "???": [{"ifconfig": "unquoted_keys"}, "no_quote_key"]
+},
+
+"no_quote_key": {
+        "???": [{"push": "nq_key"}, "nq_string"]
+},
+
+"single_quote_key": {
+        "???": [{"push": "sq_key"}, "sq_string"]
+},
+
+"after_key": {
+        "???":  [{"pushstate": "w_after_key"}, "whitespace"]
+},
+
+"w_after_key": {
+        ":": "value"
+},
+
+"maybe_after_value": {
+        "???": [[{"ifpeek": "object"}, "after_value"],
+                [{"ifpeek": "array"}, "after_value"],
+                [{"pushstate": "error"}, "whitespace"]
+        ]
+},
+
+"after_value": {
+        "???": [{"pushstate": "w_after_value"}, "whitespace"]
+},
+
+"w_after_value": {
+        ",": [{"ifconfig": "trailing_commas"}, "value_or_close", "maybe_after_separator"],
+        "}": [{"ifpop": "object"}, "maybe_after_value"],
+        "]": [{"ifpop": "array"}, "maybe_after_value"],
+        "???": [{"ifconfig": "optional_commas"}, "maybe_after_separator"]
+},
+
+
+
+
+"value_or_close": {
+        "}": [{"ifpop": "object"}, "maybe_after_value"],
+        "]": [{"ifpop": "array"}, "maybe_after_value"],
+        "???": "maybe_after_separator"
+},
+
+"maybe_after_separator": {
+        "???": [[{"ifpeek": "object"}, "after_separator"],
+                [{"ifpeek": "array"}, "after_separator"],
+                [{"pushstate": "error"}, "whitespace"]
+        ]
+},
+
+"after_separator": {
+        "???": [{"ifpeek": "object"}, "key", "value"]
+},
+
+"null_2": { "u": "null_3" },
+"null_3": { "l": "null_4" },
+"null_4": { "l": [{"pop": "null"}, "maybe_after_value"] },
+
+"true_2": { "r": "true_3" },
+"true_3": { "u": "true_4" },
+"true_4": { "e": [{"pop": "true"}, "maybe_after_value"] },
+
+"false_2": { "a": "false_3" },
+"false_3": { "l": "false_4" },
+"false_4": { "s": "false_5" },
+"false_5": { "e": [{"pop": "false"}, "maybe_after_value"] },
+
+
+"after_integer": {
+        "???": [{"pop": "integer"}, "maybe_after_value"]
+},
+
+"after_real": {
+        "???": [{"pop": "real"}, "maybe_after_value"]
+},
+
+"minus": {
+        "0": "zero_integer",
+        "$1-9": "integer"
+},
+
+"zero_integer": {
+        ".": [{"swap": "real"}, "fraction_prefix"],
+        "$exponent": [{"swap": "real"}, "exponent_prefix"],
+        "???": "after_integer"
+},
+
+"integer": {
+        "$0-9": "integer",
+        ".": [{"swap": "real"}, "fraction_prefix"],
+        "$exponent": [{"swap": "real"}, "exponent_prefix"],
+        "???": "after_integer"
+},
+
+"fraction_prefix": {
+        "$0-9": "fraction"
+},
+
+"fraction": {
+        "$0-9": "fraction",
+        "$exponent": "exponent_prefix",
+        "???": "after_real"
+},
+
+"exponent_prefix": {
+        "$exponent_prefix": "exponent_x",
+        "$0-9": "exponent"
+},
+
+"exponent_x": {
+        "$0-9": "exponent"
+},
+
+"exponent": {
+        "$0-9": "exponent",
+        "???": "after_real"
+},
+
+
+
+
+"string": {
+        "\\": "start_escape",
+        "\"": [{"ifpop": "string"}, "maybe_after_value", "end_key"],
+        "0x20-0x21": "string",
+        "0x23-0x5B": "string",
+        "0x5D-0x7F": "string",
+        "0xC2-0xDF": "continuation_1",
+        "0xE0": "check_e0",
+        "0xE1-0xEC": "continuation_2",
+        "0xED": "check_ed",
+        "0xEE-0xEF": "continuation_2",
+        "0xF0": "check_f0",
+        "0xF1-0xF3": "continuation_3",
+        "0xF4": "check_f4"
+},
+
+"end_key": {
+        "???": [{"ifpop": "key"}, "after_key"]
+},
+
+"sq_string": {
+        "\\": "start_escape",
+        "'": [{"ifpop": "sq_string"}, "maybe_after_value", "end_sq_key"],
+        "0x20-0x26": "sq_string",
+        "0x28-0x5B": "sq_string",
+        "0x5D-0x7F": "sq_string",
+        "0xC2-0xDF": "continuation_1",
+        "0xE0": "check_e0",
+        "0xE1-0xEC": "continuation_2",
+        "0xED": "check_ed",
+        "0xEE-0xEF": "continuation_2",
+        "0xF0": "check_f0",
+        "0xF1-0xF3": "continuation_3",
+        "0xF4": "check_f4"
+},
+
+"end_sq_key": {
+        "???": [{"ifpop": "sq_key"}, "after_key"]
+},
+
+
+"nq_string": {
+        "\\": [{"ifconfig": "escape_characters"}, "start_escape_chars", "start_escape"],
+        " ": [{"ifpop": "nq_string"}, "maybe_after_value", "end_nq_key"],
+        "0x21-0x5B": "nq_string",
+        "0x5D-0x7F": "nq_string",
+        "0xC2-0xDF": "continuation_1",
+        "0xE0": "check_e0",
+        "0xE1-0xEC": "continuation_2",
+        "0xED": "check_ed",
+        "0xEE-0xEF": "continuation_2",
+        "0xF0": "check_f0",
+        "0xF1-0xF3": "continuation_3",
+        "0xF4": "check_f4"
+},
+
+"end_nq_key": {
+        "???": [{"ifpop": "nq_key"}, "after_key"]
+},
+
+"start_escape": {
+        "???": [{"push": "escape"}, "escape"]
+},
+
+"start_escape_chars": {
+        "???": [{"push": "escape_chars"}, "escape_chars"]
+},
+
+"check_e0": {
+        "0xA0-0xBF": "continuation_1"
+},
+
+"check_ed": {
+        "0x80-0x9F": "continuation_1"
+},
+
+"check_f0": {
+        "0x90-0xBF": "continuation_2"
+},
+
+"check_f4": {
+        "0x80-0x8F": "continuation_2"
+},
+
+"continuation_1": { 
+        "0x80-0xBF": "select_string"
+},
+
+"select_string": {
+        "???": [{"ifpeek": ["string", "key"]}, "string", "other_string"] 
+},
+
+"other_string": {
+        "???": [{"ifpeek": ["sq_string", "sq_key"]}, "sq_string", "nq_string"]
+},
+
+"continuation_2": { 
+        "0x80-0xBF": "continuation_1" 
+},
+
+"continuation_3": { 
+        "0x80-0xBF": "continuation_2" 
+},
+
+"escape": {
+        "$single_char_escapes": "end_escape",
+        "'": [{"ifconfig": "single_quotes"}, "end_escape"],
+        "u": [{"swap": "escape_u"}, "hex_1"]
+},
+
+"end_escape": {
+        "???": [{"pop": "escape"}, "select_string"]
+},
+
+"escape_chars": {
+        "...": [{"pop": "escape_chars"}, "nq_string"]
+},
+
+"hex_1": {
+        "$hex_digit": [{"ifnpeek": "surrogate"}, "hex_2"],
+        "d": [ {"ifpeek": "surrogate" }, "low_surrogate_2", "high_surrogate_2" ],
+        "D": [ {"ifpeek": "surrogate" }, "low_surrogate_2", "high_surrogate_2" ]
+},
+
+"high_surrogate_2": {
+        "$high_surrogate_2": [ {"push": "surrogate"}, "hex_3" ]
+},
+
+"low_surrogate_2": {
+        "$low_surrogate_2": [ {"pop": "surrogate"}, "hex_3" ]
+},
+
+"hex_2": { 
+        "$hex_digit": "hex_3"
+},
+
+"hex_3": { 
+        "$hex_digit": "hex_4"
+},
+
+"hex_4": { 
+        "$hex_digit": [ 
+                [{"ifpeek": "surrogate"}, "low_surrogate"],
+                [{"pop": "escape_u"}, "select_string"]
+        ]
+},
+
+"low_surrogate": {
+        "\\": "low_surrogate_u"
+},
+
+"low_surrogate_u": {
+        "u": "hex_1"
+}
+
+}
+
+
+
+
