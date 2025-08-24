@@ -155,7 +155,7 @@ typedef struct {
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts);
 #define jsonpg_generator_new(...)  jsonpg_generator_new_opt(      \
                 (jsonpg_generator_opts){ .fd = -1,                \
-                                         .max_nesting = 1024      \
+                                         .max_nesting = 1024,     \
                                          __VA_ARGS__ })           \
 
 // jsonpg_generator_new(.stream = stdout, .pretty = true);

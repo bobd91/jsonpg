@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "jsonpg.c"
+#include "../src/jsonpg.h"
 
 static int do_boolean(void *ctx, bool is_true) 
 {
@@ -64,7 +64,7 @@ static int do_end_object(void *ctx)
         return 0;
 }
 
-static int do_error(void *ctx, jsonpg_error_code code, int at)
+static int do_error(void *ctx, jsonpg_error_code code, size_t at)
 {
         printf("\nError: %d [%ld]", code, at);
         return 0;
@@ -89,9 +89,7 @@ int main(int argc, char *argv[]) {
         if(2 != argc) 
                 return 2;
 
-        jsonpg_parser p = jsonpg_parser_new(NULL);
-        jsonpg_generator g = jsonpg_generator_new(
-                        &callbacks, 0);
+        jsonpg_parser p = jsonpg_parser_new(.comments = false);
 
         FILE *fh = fopen(argv[1], "rb");
         if(fh) {
@@ -101,9 +99,8 @@ int main(int argc, char *argv[]) {
                 uint8_t *buf = malloc(length + 1);
                 if(buf) {
                         fread(buf, length, 1, fh);
-                        jsonpg_type t = jsonpg_parse(p, buf, length, g);
+                        jsonpg_type t = jsonpg_parse(p, .bytes = buf, .count = length, .callbacks = &callbacks);
                         jsonpg_parser_free(p);
-                        jsonpg_generator_free(g);
                         free(buf);
                         int ret = (t == JSONPG_EOF) ? 0 : 1;
                         printf("Type: %d, Returned %d\n", t, ret);

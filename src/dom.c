@@ -209,9 +209,9 @@ static jsonpg_callbacks dom_callbacks = {
         .end_object = dom_end_object,
 };
 
-jsonpg_dom dom_new()
+jsonpg_dom jsonpg_dom_new(size_t size)
 {
-        jsonpg_dom dom = dom_hdr_new(0);
+        jsonpg_dom dom = dom_hdr_new(size);
         if(!dom)
                 return NULL;
 
