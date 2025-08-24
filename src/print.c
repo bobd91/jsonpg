@@ -3,8 +3,6 @@
 #include <unistd.h>
 #include <math.h>
 
-// TODO error handling of writer errors
-
 static char number_buffer[32];
 
 typedef struct print_ctx_s *print_ctx;
@@ -18,7 +16,13 @@ struct print_ctx_s {
         int nl;
         write_fn write;
         void *write_ctx;
+        jsonpg_generator g;
 };
+
+static void set_print_error(print_ctx ctx, jsonpg_error_code code)
+{
+        set_generator_error(ctx->g, code);
+}
 
 static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count) 
 {
@@ -189,7 +193,7 @@ static int print_integer(void *ctx, long l)
         print_prefix(ctx);
         int r = snprintf(number_buffer, sizeof(number_buffer), "%ld", l);
         if(r < 0) {
-                // TODO better errors
+                set_print_error(ctx, JSONPG_ERROR_NUMBER);
                 return -1;
         }
 
@@ -200,13 +204,13 @@ static int print_integer(void *ctx, long l)
 static int print_real(void *ctx, double d) 
 {
         if(!(d == 0 || isnormal(d))) {
-                // TODO better errors
+                set_print_error(ctx, JSONPG_ERROR_NUMBER);
                 return -1;
         }
         print_prefix(ctx);
         int r = snprintf(number_buffer, sizeof(number_buffer), "%16g", d);
         if(r < 0) {
-                // TODO better errors
+                set_print_error(ctx, JSONPG_ERROR_NUMBER);
                 return -1;
         }
 
@@ -307,6 +311,8 @@ static jsonpg_generator print_generator(write_fn write, void *write_ctx, int pre
                 return NULL;
         }
 
+        g->ctx_is_ours = true;
+
         ctx->level = 0;
         ctx->comma = 0;
         ctx->key = 0;
@@ -314,6 +320,9 @@ static jsonpg_generator print_generator(write_fn write, void *write_ctx, int pre
         ctx->nl = 0;
         ctx->write = write;
         ctx->write_ctx = write_ctx;
+
+        // For reporting generator errors
+        ctx->g = g;
 
         return g;
 }
@@ -326,7 +335,7 @@ static int write_fd(void *ctx, uint8_t *bytes, size_t count)
         while(size) {
                 size_t w = write(fd, start, size);
                 if(w < 0) {
-                        // TODO errors
+                        set_print_error(ctx, JSONPG_ERROR_FILE_WRITE);
                         return -1;
                 }
                 start += w;

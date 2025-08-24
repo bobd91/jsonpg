@@ -6,7 +6,7 @@ static int cannot_value(jsonpg_generator g)
         if(g->stack.size
                         && peek_stack(&g->stack) == STACK_OBJECT
                         && g->key_next) {
-                g->error = GENERATOR_EXPECTED_KEY;
+                g->error = make_error(JSONPG_ERROR_EXPECTED_KEY, g->count);
                 return 1;
         }
         return 0;
@@ -16,7 +16,7 @@ static int cannot_value(jsonpg_generator g)
 static int cannot_key(jsonpg_generator g)
 {
         if(g->stack.size && !g->key_next) {
-                g->error = GENERATOR_EXPECTED_VALUE;
+                g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE, g->count);
                 return 1;
         }
         g->key_next = 0;
@@ -29,7 +29,8 @@ static int cannot_push(jsonpg_generator g, int type)
                 return 1;
         if(g->stack.size) {
                 if(-1 == push_stack(&g->stack, type)) {
-                        g->error = GENERATOR_STACK_OVERFLOW;
+                        g->error = make_error(JSONPG_ERROR_STACKOVERFLOW,
+                                        g->count);
                         return 1;
                 }
                 g->key_next = type == STACK_OBJECT;
@@ -44,15 +45,18 @@ static int cannot_pop(jsonpg_generator g, int type)
         if(g->stack.size) {
                 cur_type = peek_stack(&g->stack);
                 if(cur_type == -1) {
-                        g->error = GENERATOR_STACK_UNDERFLOW;
+                        g->error = make_error(JSONPG_ERROR_STACKUNDERFLOW,
+                                        g->count);
                         return 1;
                 } else if(type != cur_type) {
-                        g->error = type == STACK_OBJECT
-                                ? GENERATOR_NO_OBJECT
-                                : GENERATOR_NO_ARRAY;
+                        g->error = make_error((type == STACK_OBJECT)
+                                ? JSONPG_ERROR_NO_OBJECT
+                                : JSONPG_ERROR_NO_ARRAY,
+                                        g->count);
                         return 1;
                 } else if(type == STACK_OBJECT && !g->key_next) {
-                        g->error = GENERATOR_EXPECTED_VALUE;
+                        g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE,
+                                        g->count);
                         return 1;
                 }
                 pop_stack(&g->stack);
@@ -133,14 +137,26 @@ int jsonpg_end_object(jsonpg_generator g)
 
 static int gen_error(jsonpg_generator g, int code, int at)
 {
+        g->error = make_error(code, at);
         (void)(g->callbacks->error 
                 && g->callbacks->error(g->ctx, code, at));
         return 1; // always abort after error
 }
 
-static int generate(jsonpg_generator g, jsonpg_type type, parse_result *value)
+static void generator_reset(jsonpg_generator g)
 {
-        switch(type) { 
+        g->count = 0;
+}
+
+static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
+{
+        g->error = make_error(code, g->count);
+}
+        
+static int generate(jsonpg_generator g, jsonpg_type type, jsonpg_value *value)
+{
+        g->count++;
+        switch(type) {
         case JSONPG_NULL:
                 return jsonpg_null(g);     
         case JSONPG_FALSE:
@@ -193,9 +209,15 @@ jsonpg_generator generator_new(
         return g;
 }
 
-void jsonpg_generator_free(void *p)
+void jsonpg_generator_free(jsonpg_generator g)
 {
-        pg_dealloc(p);
+        if(!g)
+                return;
+
+        if(g->ctx_is_ours)
+                pg_dealloc(g->ctx);
+
+        pg_dealloc(g);
 }
 
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
@@ -216,25 +238,30 @@ jsonpg_generator jsonpg_callback(jsonpg_callbacks *callbacks, void *ctx)
         return generator_new(callbacks, ctx, 0);
 }
 
+jsonpg_error_val jsonpg_generator_error(jsonpg_generator g)
+{
+        return g->error;
+}
+
 // Just a thin wrapper around strbuf
-// Wanted jasonpg_ prefix as exposed to users
+// Wanted jasonpg_ prefix as these functions are exposed to users
 // but didn't want to rename all of the strbuf stuff for internal use
 jsonpg_buffer jsonpg_buffer_new(size_t size)
 {
         return str_buf_new(size);
 }
 
-void jsonpg_buffer_free(void *p)
+void jsonpg_buffer_free(str_buf sbuf)
 {
-        str_buf_free(p);
+        str_buf_free(sbuf);
 }
 
-char *jsonpg_buffered_string(jsonpg_buffer b)
+char *jsonpg_buffered_string(jsonpg_buffer sbuf)
 {
-        return str_buf_content_str(b);
+        return str_buf_content_str(sbuf);
 }
 
-size_t jsonpg_buffered_bytes(jsonpg_buffer b, uint8_t **bytes)
+size_t jsonpg_buffered_bytes(jsonpg_buffer sbuf, uint8_t **bytes)
 {
-        return str_buf_content(b, bytes);
+        return str_buf_content(sbuf, bytes);
 }

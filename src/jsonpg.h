@@ -31,13 +31,34 @@ typedef enum {
         JSONPG_ERROR_UTF8,
         JSONPG_ERROR_STACKUNDERFLOW,
         JSONPG_ERROR_STACKOVERFLOW,
-        JSONPG_ERROR_FILE_READ
+        JSONPG_ERROR_FILE_READ,
+        JSONPG_ERROR_FILE_WRITE,
+        JSONPG_ERROR_EXPECTED_VALUE,
+        JSONPG_ERROR_EXPECTED_KEY,
+        JSONPG_ERROR_NO_OBJECT,
+        JSONPG_ERROR_NO_ARRAY
 } jsonpg_error_code;
+
+typedef struct {
+        uint8_t *bytes;
+        size_t length;
+} jsonpg_string_val;
+
+typedef union {
+        long integer;
+        double real;
+} jsonpg_number_val;
 
 typedef struct {
         jsonpg_error_code code;
         size_t at;
-} jsonpg_error_info;
+} jsonpg_error_val;
+
+typedef union {
+        jsonpg_number_val number;
+        jsonpg_string_val string;
+        jsonpg_error_val error;
+} jsonpg_value;
 
 typedef struct {
         int (*boolean)(void *ctx, bool is_true);
@@ -110,7 +131,8 @@ jsonpg_type jsonpg_parse_opt(jsonpg_parser, jsonpg_parse_opts);
 // Pull parser, get next parse event
 jsonpg_type jsonpg_parse_next(jsonpg_parser);
 
-jsonpg_error_info jsonpg_parse_error(jsonpg_parser);
+jsonpg_value jsonpg_parse_result(jsonpg_parser);
+jsonpg_error_val jsonpg_parse_error(jsonpg_parser);
 
 // Generate parse events from those stored in dom
 jsonpg_type jsonpg_dom_parse(jsonpg_dom, jsonpg_generator);
@@ -142,10 +164,12 @@ jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts);
 jsonpg_generator jsonpg_callback(jsonpg_callbacks *, void *);
 jsonpg_generator jsonpg_dom_builder(jsonpg_dom);
 
-void jsonpg_parser_free(void *);
-void jsonpg_generator_free(void *);
-void jsonpg_dom_free(void *);
-void jsonpg_buffer_free(void *);
+jsonpg_error_val jsonpg_generator_error(jsonpg_generator);
+
+void jsonpg_parser_free(jsonpg_parser);
+void jsonpg_generator_free(jsonpg_generator);
+void jsonpg_dom_free(jsonpg_dom);
+void jsonpg_buffer_free(jsonpg_buffer);
 
 int jsonpg_null(jsonpg_generator);
 int jsonpg_boolean(jsonpg_generator, bool);

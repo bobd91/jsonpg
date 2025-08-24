@@ -282,25 +282,27 @@ static ssize_t read_fd(reader r, void *buf, size_t count)
 {
         return read(CTX_TO_INT(r->ctx), buf, count);
 }
-void jsonpg_parser_free(void *ptr) 
+
+void jsonpg_parser_free(jsonpg_parser p) 
 {
-        if(ptr) {
-                jsonpg_parser p = ptr;
-                if(p->input_is_ours)
-                        pg_dealloc(p->input);
-                str_buf_free(p->write_buf);
-                pg_dealloc(p);
-        }
+        if(!p)
+                return;
+
+        if(p->input_is_ours)
+                pg_dealloc(p->input);
+        if(p->generator_is_ours)
+                jsonpg_generator_free(p->generator);
+        str_buf_free(p->write_buf);
+        pg_dealloc(p->reader);
+        pg_dealloc(p);
 }
 
-static jsonpg_type parse(
-                jsonpg_parser p,
-                jsonpg_generator g)
+static jsonpg_type parse(jsonpg_parser p)
 {
         jsonpg_type type;
         int abort = 0;
         while(!abort && JSONPG_EOF != (type = jsonpg_parse_next(p))) {
-                abort = generate(g, type, &p->result);
+                abort = generate(p->generator, type, &p->result);
         }
 
         return type;
@@ -309,20 +311,11 @@ static jsonpg_type parse(
 static jsonpg_type parse_bytes(
                 jsonpg_parser p, 
                 uint8_t *json, 
-                size_t count,
-                jsonpg_generator g)
+                size_t count)
 {
-        if(p->reader) {
-                pg_dealloc(p->reader);
-                p->reader = NULL;
-        }
-        p->write_buf = str_buf_reset(p->write_buf);
-        if(p->input_is_ours)
-                pg_dealloc(p->input);
-
         p->input = p->current = json;
         p->input_size = count;
-        p->input_is_ours = 0;
+        p->input_is_ours = false;
         p->last = json + count;
         p->seen_eof = 1;
         p->stack.ptr = p->stack.ptr_min;
@@ -332,24 +325,21 @@ static jsonpg_type parse_bytes(
         // Skip leading byte order mark
         p->current += bom_bytes(p->input, p->input_size);
 
-        return g
-                ? parse(p, g)
+        return (p->generator)
+                ? parse(p)
                 : JSONPG_ROOT;
 }
 
 jsonpg_type parse_reader(
                 jsonpg_parser p,
-                reader r,
-                jsonpg_generator g)
+                reader r)
 {
-        if(!(p->input_is_ours && p->input)) {
-                p->input = pg_alloc(BUF_SIZE);
-                if(!p->input)
-                        return alloc_error(p);
-                p->input_size = BUF_SIZE;
-                p->input_is_ours = 1;
-        }
-        p->write_buf = str_buf_reset(p->write_buf);
+        p->input = pg_alloc(BUF_SIZE);
+        if(!p->input)
+                return alloc_error(p);
+        p->input_size = BUF_SIZE;
+        p->input_is_ours = true;
+
         p->reader = r;
         int l = input_read(p, p->input);
         if(l < 0)
@@ -362,8 +352,8 @@ jsonpg_type parse_reader(
         // Skip leading byte order mark
         p->current += bom_bytes(p->input, p->input_size);
 
-        return g
-                ? parse(p, g)
+        return (p->generator)
+                ? parse(p)
                 : JSONPG_ROOT;
 }
 
@@ -377,21 +367,35 @@ static reader file_reader(int fd)
 
         return r;
 }
-//
-// static void reader_free(void *p)
-// {
-//         pg_dealloc(p);
-// }
-//
+
 static jsonpg_type parse_fd(
                 jsonpg_parser p, 
-                int fd, 
-                jsonpg_generator g)
+                int fd) 
 {
         reader r = file_reader(fd);
         if(!r)
                 return alloc_error(p);
-        return parse_reader(p, r, g);
+        return parse_reader(p, r);
+}
+
+void parser_reset(jsonpg_parser p)
+{
+        if(p->input_is_ours)
+                pg_dealloc(p->input);
+
+        if(p->generator_is_ours)
+                jsonpg_generator_free(p->generator);
+
+        if(p->reader)
+                pg_dealloc(p->reader);
+
+        p->write_buf = str_buf_reset(p->write_buf);
+
+        p->input = NULL;
+        p->input_is_ours = false;
+        p->generator = NULL;
+        p->generator_is_ours = false;
+        p->reader = NULL;
 }
 
 jsonpg_type jsonpg_parse_opt(jsonpg_parser p, jsonpg_parse_opts opts)
@@ -410,22 +414,31 @@ jsonpg_type jsonpg_parse_opt(jsonpg_parser p, jsonpg_parse_opts opts)
                 return JSONPG_ERROR;
         }
 
+        parser_reset(p);
+
         if(opts.dom) {
                 g = jsonpg_dom_generator(opts.dom);
+                p->generator_is_ours = true;
         } else if(opts.callbacks) {
                 g = jsonpg_callback(opts.callbacks, opts.context);
+                p->generator_is_ours = true;
         } else {
                 g = opts.generator;
         }
 
+        if(g) {
+                generator_reset(g);
+                p->generator = g;
+        }
+
         if(opts.fd >= 0)
-                return parse_fd(p, opts.fd, g);
+                return parse_fd(p, opts.fd);
         else if(opts.stream)
-                return parse_fd(p, fileno(opts.stream), g);
+                return parse_fd(p, fileno(opts.stream));
         else if(opts.bytes)
-                return parse_bytes(p, opts.bytes, opts.count, g);
+                return parse_bytes(p, opts.bytes, opts.count);
         else
-                return parse_bytes(p, (uint8_t *)opts.string, strlen(opts.string), g);
+                return parse_bytes(p, (uint8_t *)opts.string, strlen(opts.string));
 }
 
 static uint16_t flags_from_opts(jsonpg_parser_opts opts)
@@ -462,8 +475,13 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
                         return NULL;
                 }
                 p->reader = NULL;
+
                 p->input = NULL;
-                p->input_is_ours = 0;
+                p->input_is_ours = false;
+
+                p->generator = NULL;
+                p->generator_is_ours = false;
+
                 p->stack.size = stack_size;
                 p->stack.stack = (uint8_t *)(((void *)p) + struct_bytes);
                 p->flags = flags;
@@ -483,7 +501,12 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
         return p;
 }
 
-jsonpg_error_info jsonpg_parse_error(jsonpg_parser p)
+jsonpg_value jsonpg_parse_result(jsonpg_parser p)
+{
+        return p->result;
+}
+
+jsonpg_error_val jsonpg_parse_error(jsonpg_parser p)
 {
         return p->result.error;
 }

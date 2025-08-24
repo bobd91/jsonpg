@@ -19,6 +19,9 @@
 #define FLAG_IS_OBJECT                  0x80
 #define FLAG_IS_ARRAY                   0x100
 
+#define CTX_TO_INT(X) ((int)(int64_t)X)
+#define INT_TO_CTX(X)   ((void *)(int64_t)X)
+
 typedef enum {
         token_null,
         token_true,
@@ -42,21 +45,6 @@ typedef struct token_s {
         uint8_t *pos;
 } *token;
 
-typedef struct {
-        uint8_t *bytes;
-        size_t length;
-} string_val;
-
-typedef union {
-        long integer;
-        double real;
-} number_val;
-
-typedef union {
-        number_val number;
-        string_val string;
-        jsonpg_error_info error;
-} parse_result;
 
 
 typedef struct str_buf_s *str_buf;
@@ -65,17 +53,19 @@ typedef struct reader_s *reader;
 struct jsonpg_parser_s {
         uint8_t seen_eof;
         uint8_t token_ptr;
-        uint8_t input_is_ours;
         uint8_t state;
         uint8_t push_state;
         uint16_t flags;
+        bool input_is_ours;
         uint32_t input_size;
         uint8_t *input;   
         uint8_t *current;
         uint8_t *last;
         str_buf write_buf;
         reader reader;
-        parse_result result;
+        jsonpg_value result;
+        bool generator_is_ours;
+        jsonpg_generator generator;
         struct token_s tokens[TOKEN_MAX];
         struct stack_s stack;
 };

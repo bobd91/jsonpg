@@ -264,12 +264,12 @@ void *fmalloc(size_t size) {
 
 char result_char(jsonpg_parser p)
 {
-        return (char)*p->result.string.bytes;
+        return (char)*jsonpg_parse_result(p).string.bytes;
 }
 
 char *result_str(jsonpg_parser p)
 {
-        string_val s = p->result.string;
+        string_val s = jsonpg_parse_result(p).string;
         char *ptr = fmalloc(1 + s.length);
         memcpy(ptr, s.bytes, s.length);
         ptr[s.length] = '\0';
@@ -1470,8 +1470,8 @@ int main(int argc, char *argv[])
         if(type != JSONPG_EOF) {
                 if(type == JSONPG_ERROR) 
                         printf("Error %d at %ld\n", 
-                                        p->result.error.code, 
-                                        p->result.error.at);
+                                        jsonpg_parse_result(p).error.code, 
+                                        jsonpg_parse_result(p).error.at);
                 else
                         printf("Expecting EOF, got: %d\n", type);
                 exit(1);

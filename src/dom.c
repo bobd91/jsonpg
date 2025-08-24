@@ -219,12 +219,11 @@ jsonpg_dom dom_new()
         return dom;
 }
 
-void jsonpg_dom_free(void *p)
+void jsonpg_dom_free(jsonpg_dom dom)
 {
-        if(!p) 
+        if(!dom) 
                 return;
 
-        jsonpg_dom dom = p;
         jsonpg_dom next;
         while(dom) {
                 next = dom->next;
@@ -245,11 +244,12 @@ jsonpg_type jsonpg_dom_parse(jsonpg_dom dom, jsonpg_generator g)
 {
         int abort = 0;
         jsonpg_dom hdr = dom;
+        generator_reset(g);
         while(!abort && hdr) {
                 size_t offset = sizeof(struct jsonpg_dom_s);
                 while(!abort && offset < hdr->count) {
                         dom_node node = (dom_node)(offset + (void *)hdr);
-                        parse_result result;
+                        jsonpg_value result;
                         result.string.bytes = NULL;
                         result.string.length = 0;
                         offset += NODE_SIZE;

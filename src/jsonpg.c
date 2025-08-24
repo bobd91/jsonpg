@@ -2,7 +2,6 @@
 #include "stack.h"
 #include "parse.h"
 #include "generate.h"
-#include "ctx.h"
 
 //#define DEBUG
 #include "debug.c"
@@ -11,8 +10,8 @@
 #include "utf8.c"
 #include "print.c"
 #include "stack.c"
-#include "generate.c"
 #include "error.c"
+#include "generate.c"
 #include "dom.c"
 #include "parse.c"
 #include "state.c"
