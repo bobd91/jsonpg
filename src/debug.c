@@ -15,7 +15,7 @@ static void log_open(char *logfile)
 
 static uint8_t log_printablechar(uint8_t c)
 {
-        if(0x20 <= c && c <= 0x7F)
+        if(0x20 <= c)
                 return c;
         else
                 return '.';

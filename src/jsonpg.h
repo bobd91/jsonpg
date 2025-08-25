@@ -102,7 +102,7 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts);
 #define jsonpg_parser_new(...)   jsonpg_parser_new_opt(        \
                 (jsonpg_parser_opts){ .max_nesting = 1024,     \
                                       .comments = true,        \
-                                      __VA_ARGS__ })           \
+                                      __VA_ARGS__ })           
 
 // jsonpg_parser_new(.max_nesting = 2048, .is_array = true, .unquoted_strings = true);
 // jsonpg_parser_new(.comments = false);
@@ -122,7 +122,7 @@ typedef struct {
 jsonpg_type jsonpg_parse_opt(jsonpg_parser, jsonpg_parse_opts);
 #define jsonpg_parse(X, ...)  jsonpg_parse_opt((X),           \
                 (jsonpg_parse_opts){ .fd = -1,                \
-                                      __VA_ARGS__ })         \
+                                      __VA_ARGS__ })         
 
 // jsonpg_parse(parser, .stream = stdin, .callback = &my_callbacks, .context = &my_ctx));
 // jsonpg_parse(parser, .bytes = my_input_buffer, .count = 5364);
@@ -138,7 +138,7 @@ jsonpg_error_val jsonpg_parse_error(jsonpg_parser);
 jsonpg_type jsonpg_dom_parse(jsonpg_dom, jsonpg_generator);
 
 jsonpg_dom jsonpg_dom_new(size_t);
-jsonpg_buffer jsnonpg_buffer_new(size_t);
+jsonpg_buffer jsonpg_buffer_new(size_t);
 
 char *jsonpg_buffered_string(jsonpg_buffer);
 size_t jsonpg_buffered_bytes(jsonpg_buffer, uint8_t **);
@@ -156,7 +156,7 @@ jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts);
 #define jsonpg_generator_new(...)  jsonpg_generator_new_opt(      \
                 (jsonpg_generator_opts){ .fd = -1,                \
                                          .max_nesting = 1024,     \
-                                         __VA_ARGS__ })           \
+                                         __VA_ARGS__ })           
 
 // jsonpg_generator_new(.stream = stdout, .pretty = true);
 // jsonpg_generator_new(.fd = my_file, .max_nesting = 0 );

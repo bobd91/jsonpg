@@ -29,6 +29,79 @@ void tfree(void *p)
 
 jsonpg_parser pp;
 
+char *type_name(jsonpg_type type) {
+        static char *names[] = {
+                "None",
+                "Root",
+                "False",
+                "Null",
+                "True",
+                "Integer",
+                "Real",
+                "String",
+                "Key",
+                "[",
+                "]",
+                "{",
+                "}",
+                "Error",
+                "EOF"
+        };
+        return names[type];
+}
+
+void dom_validate(jsonpg_dom dom) {
+
+        while(dom) {
+                printf("Header: count = %ld, size = %ld\n", dom->count, dom->size);
+                size_t offset = sizeof(struct jsonpg_dom_s);
+                while(offset < dom->count) {
+                        dom_node node = (dom_node)(offset + (void *)dom);
+                        jsonpg_type type = node->is.type.type;
+                        size_t count = node->is.type.count;
+                        printf("  Node: offset = %ld, type = %s, count = %ld\n",
+                                        offset,
+                                        type_name(type),
+                                        count);
+                        offset += NODE_SIZE;
+                        char *stype = NULL;
+                        switch(type) {
+                        case JSONPG_INTEGER:
+                                node++;
+                                printf("    Integer: offset = %ld, value = %ld\n",
+                                                offset,
+                                                node->is.integer);
+                                offset += NODE_SIZE;
+                                break;
+                        case JSONPG_REAL:
+                                node++;
+                                printf("    Real: offset = %ld, value = %g\n",
+                                                offset,
+                                                node->is.real);
+                                offset += NODE_SIZE;
+                                break;
+                        case JSONPG_STRING:
+                                stype = "String";
+                        case JSONPG_KEY:
+                                if(stype == NULL)
+                                        stype = "Key";
+                                node++;
+                                
+                                printf("    %s: offset = %ld, value = ", stype, offset);
+                                if(count > 8)
+                                        printf("\"%.8s...\"\n", (char *)node->is.bytes);
+                                else
+                                        printf("\"%s\"\n", (char *)node->is.bytes);
+                                offset += dom_size_align(count);
+                                break;
+                        default:
+                        }
+                }
+                dom = dom->next;
+        }
+
+}
+
 int main(int argc, char *argv[])
 {
         //jsonpg_set_allocator(talloc, tfree);
@@ -51,13 +124,28 @@ int main(int argc, char *argv[])
                         exit(1);
                 }
 
-                res = jsonpg_parse(p, .fd = fd, .generator = g);
-                if(JSONPG_ERROR == res) {
-                        printf("DOM Parse res: %d\n", res);
+                FILE *outstr = fopen("/dev/null", "w");
+                if(!outstr) {
+                        perror("Failed to open file for writing");
                         exit(1);
                 }
-                g = jsonpg_generator_new(.stream = stdout, .pretty = true, .max_nesting = 0);
-                res = jsonpg_dom_parse(dom, g);
+                g = jsonpg_generator_new(.stream = outstr, .pretty = true, .max_nesting = 0);
+                g->error.code = 0;
+                g->error.at = 0;
+                res = jsonpg_parse(p, .fd = fd, .generator = g);
+                fclose(outstr);
+                // if(JSONPG_ERROR == res) {
+                //         printf("DOM Parse res: %d\n", res);
+                //         exit(1);
+                // }
+                // //dom_validate(dom);
+                // jsonpg_parser_free(p);
+                // p = NULL;
+                //
+                // g = jsonpg_generator_new(.stream = stdout, .pretty = true, .max_nesting = 0);
+                // g->error.code = 0;
+                // g->error.at = 0;
+                // res = jsonpg_dom_parse(dom, g);
         
         } else if(argc == 3) {
                 if(0 == strcmp("-e", argv[1])) {
@@ -126,8 +214,18 @@ int main(int argc, char *argv[])
 
         if(res == JSONPG_EOF)
                 printf("\n\nResult EOF: %d\n", res);
-        else
-                printf("\n\nResult : %d (%d[%ld])\n", res, p->result.error.code, p->result.error.at);
+        else {
+                jsonpg_error_code code = 0;
+                size_t at = 0;
+                if(p) {
+                        code = p->result.error.code;
+                        at = p->result.error.at;
+                } else if(g) {
+                        code = g->error.code;
+                        at = g->error.at;
+                }
+                printf("\n\nResult : %d (%d[%ld])\n", res, code, at);
+        }
 
         jsonpg_generator_free(g);
         jsonpg_parser_free(p);

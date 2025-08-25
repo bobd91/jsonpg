@@ -77,11 +77,11 @@ static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count)
                 } else {
                         print_p = NULL;
                         int v = valid_utf8_sequence(s, count - (s - bytes));
-                        if(!v)
+                        if(!v) {
+                                set_print_error(ctx, JSONPG_ERROR_UTF8);
                                 return -1;
+                        }
                         s += v;
-                        s++;
-
                 }
                 if(print_p) {
                         // We have to print an escape sequence 

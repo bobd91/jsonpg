@@ -3,7 +3,7 @@
 #include "parse.h"
 #include "generate.h"
 
-//#define DEBUG
+#define JSONPG_DEBUG
 #include "debug.c"
 #include "alloc.c"
 #include "strbuf.c"

@@ -54,9 +54,12 @@ static int push_token(jsonpg_parser p, token_type type)
                 t->pos++;
         } else if(token_type_info[type] & TOKEN_INFO_IS_ESCAPE) {
                 // Copy previous bytes from enclosing string
-                assert(p->token_ptr > 0 && "Push escape token with no enclosing string");
+                assert(p->token_ptr > 1 && "Push escape token with no enclosing string");
 
-                uint8_t *start = p->tokens[p->token_ptr - 1].pos;
+                token et = &p->tokens[p->token_ptr - 2];
+                assert((token_type_info[et->type] & TOKEN_INFO_IS_STRING)
+                                && "Push escape token with no enclosing string");
+                uint8_t *start = et->pos;
                 if(write_b(start, p->current - start))
                         return -1;
 
@@ -299,9 +302,15 @@ void jsonpg_parser_free(jsonpg_parser p)
 
 static jsonpg_type parse(jsonpg_parser p)
 {
+        static size_t call_count = 0;
+
         jsonpg_type type;
         int abort = 0;
         while(!abort && JSONPG_EOF != (type = jsonpg_parse_next(p))) {
+                call_count++;
+                if(call_count == 20506) {
+                        call_count += 0;
+                }
                 abort = generate(p->generator, type, &p->result);
         }
 
