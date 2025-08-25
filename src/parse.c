@@ -258,23 +258,35 @@ static int parser_read_next(jsonpg_parser p)
                                 // and we need to copy entire escape sequence
                                 assert(p->token_ptr > 1 
                                                 && "Surrogate token without parent");
-                                tpos = p->tokens[p->token_ptr - 2].pos;
+
+                                token escu_t = &p->tokens[p->token_ptr -2];
+                                tpos = escu_t->pos;
+
+                                // Have to adjust start of both the current token
+                                // and the enclosing escape_u token
+                                int diff = t->pos - escu_t->pos;
+                                escu_t->pos = p->input;
+                                t->pos = escu_t->pos + diff;
                         } else {
                                 tpos = t->pos;
+                                t->pos = p->input;
                         }
                         while(tpos < p->last)
                                 *start++ = *tpos++;
-                        
+
                 } else if(tinfo & TOKEN_INFO_IS_STRING) {
                         // write string bytes as we are still in a string
                         if(write_b(t->pos, p->last - t->pos))
                                 return -1;
                         // And adjust token to start of string continuation
-                        t->pos = start;
+                        t->pos = p->input;
 
+                } else {
+                        t->pos = p->input;
                 }
         }
         int l = input_read(p, start);
+
         if(l >= 0)
                 p->seen_eof = (l == 0);
 

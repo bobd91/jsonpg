@@ -1,3 +1,4 @@
+#include "warnings.h"
 #include "jsonpg.h"
 #include "stack.h"
 #include "parse.h"

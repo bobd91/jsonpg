@@ -87,13 +87,10 @@ static int str_buf_append(str_buf sbuf, uint8_t *bytes, size_t count)
         return 0;
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 static int str_buf_append_chars(str_buf sbuf, char *str)
 {
         return str_buf_append(sbuf, (uint8_t *)str, strlen(str));
 }
-#pragma GCC diagnostic pop
 
 static int str_buf_append_c(str_buf sbuf, char c)
 {

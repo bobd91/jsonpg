@@ -175,8 +175,6 @@ static int valid_utf8_sequence(uint8_t *bytes, size_t count)
  *
  * Returns 0 if valid and succeeds in writing bytes, otherwise -1
  */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 static int write_utf8_sequence(uint8_t *bytes, size_t count, str_buf write_buf) 
 {
         int len = valid_utf8_sequence(bytes, count);
@@ -188,7 +186,6 @@ static int write_utf8_sequence(uint8_t *bytes, size_t count, str_buf write_buf)
 
         return len;
 }
-#pragma GCC diagnostic pop
 
 /*
  * Counts the number of characters that match the byte order mark
@@ -207,25 +204,19 @@ static size_t bom_bytes(uint8_t *bytes, size_t count)
  * Returns non-zero if the supplied byte is valid
  * as the first byte of a surrogate pair  
  */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 static bool is_first_surrogate(uint8_t byte)
 {
         return IS_1ST_SURROGATE(byte);
 }
-#pragma GCC diagnostic pop
 
 /*
  * Returns non-zero if the supplied byte is valid
  * as the second item of a surrogate pair  
  */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 static bool is_second_surrogate(uint8_t byte)
 {
         return IS_2ND_SURROGATE(byte);
 }
-#pragma GCC diagnostic pop
 
 /*
  * Combines a valid utf16 surrogate pair into a valid Unicode codepoint

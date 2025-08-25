@@ -124,16 +124,10 @@ int main(int argc, char *argv[])
                         exit(1);
                 }
 
-                FILE *outstr = fopen("/dev/null", "w");
-                if(!outstr) {
-                        perror("Failed to open file for writing");
-                        exit(1);
-                }
-                g = jsonpg_generator_new(.stream = outstr, .pretty = true, .max_nesting = 0);
+                g = jsonpg_generator_new(.stream = stdout, .max_nesting = 0);
                 g->error.code = 0;
                 g->error.at = 0;
                 res = jsonpg_parse(p, .fd = fd, .generator = g);
-                fclose(outstr);
                 // if(JSONPG_ERROR == res) {
                 //         printf("DOM Parse res: %d\n", res);
                 //         exit(1);
