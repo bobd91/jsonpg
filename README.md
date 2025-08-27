@@ -1,2 +1,2 @@
 # jsonpg
-JSON Parser Generator
+JSON Parser and Generator
