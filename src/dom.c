@@ -29,6 +29,13 @@ struct dom_node_s {
         } is;
 };
 
+dom_info dom_parser_info(jsonpg_dom dom)
+{
+        dom_info di;
+        di.hdr = dom;
+        di.offset = sizeof(struct jsonpg_dom_s);
+        return di;
+}
 
 // Ensure all sizes align with structure size
 static size_t dom_size_align(size_t size)
@@ -209,7 +216,7 @@ static jsonpg_callbacks dom_callbacks = {
         .end_object = dom_end_object,
 };
 
-jsonpg_dom jsonpg_dom_new(size_t size)
+jsonpg_dom dom_new(size_t size)
 {
         jsonpg_dom dom = dom_hdr_new(size);
         if(!dom)
@@ -219,8 +226,9 @@ jsonpg_dom jsonpg_dom_new(size_t size)
         return dom;
 }
 
-void jsonpg_dom_free(jsonpg_dom dom)
+void dom_free(void *p)
 {
+        jsonpg_dom dom = p;
         if(!dom) 
                 return;
 
@@ -232,59 +240,57 @@ void jsonpg_dom_free(jsonpg_dom dom)
         }
 }
 
-jsonpg_generator jsonpg_dom_generator(jsonpg_dom dom)
+jsonpg_dom jsonpg_result_dom(jsonpg_generator g)
 {
+        return g->ctx;
+}
+
+jsonpg_generator dom_generator(void)
+{
+        jsonpg_dom dom = dom_new(0);
         if(!dom)
                 return NULL;
 
-        return generator_new(&dom_callbacks, dom, 0);
+        return generator_new(&dom_callbacks, dom, dom_free, 0);
 }
 
-jsonpg_type jsonpg_dom_parse(jsonpg_dom dom, jsonpg_generator g)
+jsonpg_type dom_parse_next(jsonpg_parser p)
 {
-        int abort = 0;
-        jsonpg_dom hdr = dom;
-        dom_node node;
-        jsonpg_value result;
-        jsonpg_type type;
-        size_t count;
-        size_t offset;
-        generator_reset(g);
-        while(!abort && hdr) {
-                offset = sizeof(struct jsonpg_dom_s);
-                while(!abort && offset < hdr->count) {
-                        node = (dom_node)(offset + (void *)hdr);
-                        result.string.bytes = NULL;
-                        result.string.length = 0;
-                        offset += NODE_SIZE;
-                        type = node->is.type.type;
-                        count = node->is.type.count;
-                        switch(type) {
-                        case JSONPG_INTEGER:
-                                node++;
-                                offset += NODE_SIZE;
-                                result.number.integer = node->is.integer;
-                                break;
-                        case JSONPG_REAL:
-                                node++;
-                                offset += NODE_SIZE;
-                                result.number.real = node->is.real;
-                                break;
-                        case JSONPG_STRING:
-                        case JSONPG_KEY:
-                                node++;
-                                offset += dom_size_align(count);
-                                result.string.bytes = node->is.bytes;
-                                result.string.length = count;
-                                break;
-                        default:
-                        }
-                        abort = generate(g, type, &result);
-                }
+        jsonpg_dom hdr = p->dom_info.hdr;
+        size_t offset = p->dom_info.offset;
+
+        if(offset >= hdr->count) {
                 hdr = hdr->next;
+                if(!hdr)
+                        return JSONPG_EOF;
+                offset = sizeof(struct jsonpg_dom_s);
         }
-        if(abort)
-                return JSONPG_ERROR;
-        else
-                return JSONPG_EOF;
+
+        dom_node node = (dom_node)(offset + (void *)hdr);
+        offset += NODE_SIZE;
+        jsonpg_type type = node->is.type.type;
+        size_t count = node->is.type.count;
+        switch(type) {
+        case JSONPG_INTEGER:
+                node++;
+                offset += NODE_SIZE;
+                p->result.number.integer = node->is.integer;
+                break;
+        case JSONPG_REAL:
+                node++;
+                offset += NODE_SIZE;
+                p->result.number.real = node->is.real;
+                break;
+        case JSONPG_STRING:
+        case JSONPG_KEY:
+                node++;
+                offset += dom_size_align(count);
+                p->result.string.bytes = node->is.bytes;
+                p->result.string.length = count;
+                break;
+        default:
+        }
+        p->dom_info.hdr = hdr;
+        p->dom_info.offset = offset;
+        return type;
 }

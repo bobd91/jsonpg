@@ -54,15 +54,16 @@ static str_buf str_buf_new(size_t size)
         return str_buf_alloc(sbuf, size);
 }
 
-static void str_buf_free(str_buf sbuf)
+static void str_buf_free(void *p)
 {
+        str_buf sbuf = p;
         if(sbuf) {
                 pg_dealloc(sbuf->bytes);
                 pg_dealloc(sbuf);
         }
 }
 
-static int str_buf_append(str_buf sbuf, uint8_t *bytes, size_t count)
+static int str_buf_append(str_buf sbuf, const uint8_t *bytes, size_t count)
 {
         if(!sbuf->bytes && !str_buf_alloc_new(sbuf))
                 return -1;

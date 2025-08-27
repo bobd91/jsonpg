@@ -191,7 +191,7 @@ static int write_utf8_sequence(uint8_t *bytes, size_t count, str_buf write_buf)
  * Counts the number of characters that match the byte order mark
  * Returns the length of the BOM if all bytes match, or 0
  */
-static size_t bom_bytes(uint8_t *bytes, size_t count)
+static size_t utf8_bom_bytes(uint8_t *bytes, size_t count)
 {
         static size_t bom_count = sizeof(BYTE_ORDER_MARK) / sizeof(BYTE_ORDER_MARK[0]);
         return (count >= bom_count 

@@ -29,7 +29,7 @@ static int cannot_push(jsonpg_generator g, int type)
                 return 1;
         if(g->stack.size) {
                 if(-1 == push_stack(&g->stack, type)) {
-                        g->error = make_error(JSONPG_ERROR_STACKOVERFLOW,
+                        g->error = make_error(JSONPG_ERROR_STACK_OVERFLOW,
                                         g->count);
                         return 1;
                 }
@@ -45,7 +45,7 @@ static int cannot_pop(jsonpg_generator g, int type)
         if(g->stack.size) {
                 cur_type = peek_stack(&g->stack);
                 if(cur_type == -1) {
-                        g->error = make_error(JSONPG_ERROR_STACKUNDERFLOW,
+                        g->error = make_error(JSONPG_ERROR_STACK_UNDERFLOW,
                                         g->count);
                         return 1;
                 } else if(type != cur_type) {
@@ -143,9 +143,10 @@ static int gen_error(jsonpg_generator g, int code, int at)
         return 1; // always abort after error
 }
 
-static void generator_reset(jsonpg_generator g)
+static jsonpg_generator generator_reset(jsonpg_generator g)
 {
         g->count = 0;
+        return g;
 }
 
 static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
@@ -188,6 +189,7 @@ static int generate(jsonpg_generator g, jsonpg_type type, jsonpg_value *value)
 jsonpg_generator generator_new(
                 jsonpg_callbacks *callbacks, 
                 void *ctx,
+                void (*free_ctx)(void *),
                 uint16_t stack_size)
 {
         jsonpg_generator g = pg_alloc(sizeof(struct jsonpg_generator_s)
@@ -196,6 +198,7 @@ jsonpg_generator generator_new(
                 return NULL;
         g->callbacks = callbacks;
         g->ctx = ctx;
+        g->free_ctx = free_ctx;
 
         g->key_next = 0;
 
@@ -214,54 +217,35 @@ void jsonpg_generator_free(jsonpg_generator g)
         if(!g)
                 return;
 
-        if(g->ctx_is_ours)
-                pg_dealloc(g->ctx);
+        if(g->free_ctx)
+                (*g->free_ctx)(g->ctx);
 
         pg_dealloc(g);
 }
 
+jsonpg_generator callback_generator(jsonpg_callbacks *callbacks, void *ctx)
+{
+        return generator_new(callbacks, ctx, NULL, 0);
+}
+
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
 {
-        if(1 != (opts.fd >= 0) + (opts.stream != NULL) + (opts.buffer != NULL))
+        if(1 != (opts.fd > 0) 
+                        + (opts.buffer == true)
+                        + (opts.dom == true)
+                        + (opts.writer != NULL)
+                        + (opts.callbacks != NULL))
                 return NULL;
 
         if(opts.fd >= 0)
-                return file_printer(opts.fd, opts.pretty, opts.max_nesting);
-        else if(opts.stream) 
-                return file_printer(fileno(opts.stream), opts.pretty, opts.max_nesting);
+                return file_printer(opts.fd, opts.indent, opts.max_nesting);
+        else if(opts.buffer)
+                return buffer_printer(opts.indent, opts.max_nesting);
+        else if(opts.writer)
+                return write_printer(opts.writer, opts.indent, opts.max_nesting);
+        else if(opts.dom)
+                return dom_generator();
         else
-                return buffer_printer(opts.buffer, opts.pretty, opts.max_nesting);
-}
+                return callback_generator(opts.callbacks, opts.ctx);
 
-jsonpg_generator jsonpg_callback(jsonpg_callbacks *callbacks, void *ctx)
-{
-        return generator_new(callbacks, ctx, 0);
-}
-
-jsonpg_error_val jsonpg_generator_error(jsonpg_generator g)
-{
-        return g->error;
-}
-
-// Just a thin wrapper around strbuf
-// Wanted jasonpg_ prefix as these functions are exposed to users
-// but didn't want to rename all of the strbuf stuff for internal use
-jsonpg_buffer jsonpg_buffer_new(size_t size)
-{
-        return str_buf_new(size);
-}
-
-void jsonpg_buffer_free(str_buf sbuf)
-{
-        str_buf_free(sbuf);
-}
-
-char *jsonpg_buffered_string(jsonpg_buffer sbuf)
-{
-        return str_buf_content_str(sbuf);
-}
-
-size_t jsonpg_buffered_bytes(jsonpg_buffer sbuf, uint8_t **bytes)
-{
-        return str_buf_content(sbuf, bytes);
 }

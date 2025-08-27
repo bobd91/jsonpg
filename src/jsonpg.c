@@ -1,10 +1,11 @@
 #include "warnings.h"
 #include "jsonpg.h"
 #include "stack.h"
+#include "dom.h"
 #include "parse.h"
 #include "generate.h"
 
-#define JSONPG_DEBUG
+//#define JSONPG_DEBUG
 #include "debug.c"
 #include "alloc.c"
 #include "strbuf.c"

@@ -34,13 +34,13 @@
 #define process_escape_u(X)     process_escape_u(p, (X))
 
 typedef enum {
-        config_comments = FLAG_COMMENTS,
-        config_trailing_commas = FLAG_TRAILING_COMMAS,
-        config_single_quotes = FLAG_SINGLE_QUOTES,
-        config_unquoted_keys = FLAG_UNQUOTED_KEYS,
-        config_unquoted_strings = FLAG_UNQUOTED_STRINGS,
-        config_escape_characters = FLAG_ESCAPE_CHARACTERS,
-        config_optional_commas = FLAG_OPTIONAL_COMMAS
+        config_comments = JSONPG_FLAG_COMMENTS,
+        config_trailing_commas = JSONPG_FLAG_TRAILING_COMMAS,
+        config_single_quotes = JSONPG_FLAG_SINGLE_QUOTES,
+        config_unquoted_keys = JSONPG_FLAG_UNQUOTED_KEYS,
+        config_unquoted_strings = JSONPG_FLAG_UNQUOTED_STRINGS,
+        config_escape_characters = JSONPG_FLAG_ESCAPE_CHARACTERS,
+        config_optional_commas = JSONPG_FLAG_OPTIONAL_COMMAS
 } config_flags;
 
 uint8_t state_map[][256] = {
@@ -251,7 +251,7 @@ char *states[256] = {
 };
 #endif
 
-jsonpg_type jsonpg_parse_next(jsonpg_parser p) {
+jsonpg_type parse_next(jsonpg_parser p) {
         static void* dispatch_table[0x80] = {
                         &&L0x80,
                         &&L0x81,
@@ -307,7 +307,7 @@ jsonpg_type jsonpg_parse_next(jsonpg_parser p) {
 
         if(p->state == state_initial) {
                 p->push_state = 
-                        (p->flags & FLAG_IS_OBJECT)
+                        (p->flags & JSONPG_FLAG_IS_OBJECT)
                                 ? state_w_key
                                 : state_w_value;
                 p->state = state_whitespace;

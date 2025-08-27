@@ -6,7 +6,7 @@
 static char number_buffer[32];
 
 typedef struct print_ctx_s *print_ctx;
-typedef int (*write_fn)(void *, uint8_t *, size_t);
+typedef ssize_t (*write_fn)(void *, const void *, size_t);
 
 struct print_ctx_s {
         int level;
@@ -14,8 +14,10 @@ struct print_ctx_s {
         int key;
         int pretty;
         int nl;
+        char *indent;
         write_fn write;
         void *write_ctx;
+        void (*free_write_ctx)(void *);
         jsonpg_generator g;
 };
 
@@ -89,7 +91,7 @@ static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count)
                         if(ctx->write(ctx->write_ctx, last_s, s - last_s - 1))
                                 return -1;
                         last_s = s;
-                        if(ctx->write(ctx->write_ctx, (uint8_t *)print_p, print_w))
+                        if(ctx->write(ctx->write_ctx, print_p, print_w))
                                 return -1;
                 }
         }
@@ -98,12 +100,12 @@ static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count)
 
 static int write_c(print_ctx ctx, char c)
 {
-        return ctx->write(ctx->write_ctx, (uint8_t *)&c, 1);
+        return ctx->write(ctx->write_ctx, &c, 1);
 }
 
 static int write_s(print_ctx ctx, char *s)
 {
-        return ctx->write(ctx->write_ctx, (uint8_t *)s, strlen(s));
+        return ctx->write(ctx->write_ctx, s, strlen(s));
 }
 
 static int print_indent(print_ctx ctx)
@@ -117,7 +119,7 @@ static int print_indent(print_ctx ctx)
         }
 
         for(int i = 0 ; i < ctx->level ; i++)
-                if(write_s(ctx, "    "))
+                if(write_s(ctx, ctx->indent))
                         return -1;
 
         return 0;
@@ -298,28 +300,52 @@ static jsonpg_callbacks printer_callbacks = {
         .error = print_error
 };
 
-static jsonpg_generator print_generator(write_fn write, void *write_ctx, int pretty, uint16_t stack_size)
+static void print_ctx_free(void *p)
 {
-        print_ctx ctx = pg_alloc(sizeof(struct print_ctx_s));
+        print_ctx ctx = p;
+        if(ctx->free_write_ctx)
+                (*(ctx->free_write_ctx))(ctx->write_ctx);
+        pg_dealloc(ctx);
+}
+
+static jsonpg_generator print_generator(
+                write_fn write, 
+                void *write_ctx, 
+                void (*free_write_ctx)(void *),
+                int indent, 
+                uint16_t stack_size)
+{
+        print_ctx ctx = pg_alloc(sizeof(struct print_ctx_s) + indent + 1);
         if(!ctx)
                 return NULL;
 
-        jsonpg_generator g = generator_new(&printer_callbacks, ctx, stack_size);
+        jsonpg_generator g = generator_new(
+                        &printer_callbacks, 
+                        ctx, 
+                        print_ctx_free,
+                        stack_size);
 
         if(!g) {
                 pg_dealloc(ctx);
                 return NULL;
         }
 
-        g->ctx_is_ours = true;
-
         ctx->level = 0;
         ctx->comma = 0;
         ctx->key = 0;
-        ctx->pretty = pretty;
+        if(indent) {
+                ctx->pretty = true;
+                ctx->indent = sizeof(struct print_ctx_s) + (void *)ctx;
+                for(int i ; i < indent ;i++)
+                        ctx->indent[i] = ' ';
+                ctx->indent[indent] = '\0';
+        } else {
+                ctx->pretty = false;
+        }
         ctx->nl = 0;
         ctx->write = write;
         ctx->write_ctx = write_ctx;
+        ctx->free_write_ctx = free_write_ctx;
 
         // For reporting generator errors
         ctx->g = g;
@@ -327,10 +353,10 @@ static jsonpg_generator print_generator(write_fn write, void *write_ctx, int pre
         return g;
 }
 
-static int write_fd(void *ctx, uint8_t *bytes, size_t count)
+static ssize_t write_fd(void *ctx, const void *bytes, size_t count)
 {
         int fd = CTX_TO_INT(ctx);
-        uint8_t *start = bytes;
+        const uint8_t *start = bytes;
         size_t size = count;
         while(size) {
                 size_t w = write(fd, start, size);
@@ -344,19 +370,35 @@ static int write_fd(void *ctx, uint8_t *bytes, size_t count)
         return 0;
 }
 
-static int write_buffer(void *ctx, uint8_t *bytes, size_t count)
+char *jsonpg_result_string(jsonpg_generator g)
+{
+        return str_buf_content_str(g->ctx);
+}
+
+size_t jsonpg_result_bytes(jsonpg_generator g, uint8_t **bytes)
+{
+        return str_buf_content(g->ctx, bytes);
+}
+
+static ssize_t write_buffer(void *ctx, const void *bytes, size_t count)
 {
         str_buf sbuf = ctx;
         return str_buf_append(sbuf, bytes, count);
 }
 
-jsonpg_generator file_printer(int fd, int pretty, int stack_size)
+jsonpg_generator file_printer(int fd, int indent, int stack_size)
 {
-        return print_generator(write_fd, INT_TO_CTX(fd), pretty, stack_size);
+        return print_generator(write_fd, INT_TO_CTX(fd), NULL, indent, stack_size);
 }
 
-jsonpg_generator buffer_printer(str_buf sbuf, int pretty, int stack_size)
+jsonpg_generator buffer_printer(int indent, int stack_size)
 {
-        return print_generator(write_buffer, sbuf, pretty, stack_size);
+        return print_generator(write_buffer, str_buf_new(0), str_buf_free, indent, stack_size);
+}
+
+jsonpg_generator write_printer(jsonpg_writer writer, int indent, int stack_size)
+{
+        return print_generator(writer->write, writer->ctx, NULL, indent, stack_size);
+
 }
 

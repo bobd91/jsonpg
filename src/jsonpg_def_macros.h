@@ -1,3 +1,28 @@
+/*
+ * Macros to make writing JSON via a generator more concise
+ *
+ * // This define specifies the name of your generator variable
+ * // defaults to 'gen' 
+ * #define JSONPG_GEN  my_gen
+ * jsonpg_generator my_gen = jsonpg_generator_new(...);
+ *
+ * #include jsonpg_def_macros.h
+ *
+ * begin_array();
+ * object(
+ *      kv("k1", real(12.5)),
+ *      kv("k2", array(true(), false(), null())),
+ *      kv("k3", str("Value 3"))
+ *      );
+ * end_array();
+ *
+ * #include jsonpg_undef_macros.h
+ *
+ * Produces:
+ *
+ * [ { "k1": 12.5, "k2": [true, false, null], "k3": "Value 3" } ]
+ *
+ */
 
 #ifndef JSONPG_GEN
 #define JSONPG_GEN      gen

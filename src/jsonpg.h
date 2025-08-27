@@ -4,9 +4,19 @@
 #include <stdio.h>
 #include <stddef.h>
 
+#define JSONPG_FLAG_COMMENTS                   0x01
+#define JSONPG_FLAG_TRAILING_COMMAS            0x02
+#define JSONPG_FLAG_SINGLE_QUOTES              0x04
+#define JSONPG_FLAG_UNQUOTED_KEYS              0x08
+#define JSONPG_FLAG_UNQUOTED_STRINGS           0x10
+#define JSONPG_FLAG_ESCAPE_CHARACTERS          0x20
+#define JSONPG_FLAG_OPTIONAL_COMMAS            0x40
+#define JSONPG_FLAG_IS_OBJECT                  0x80
+#define JSONPG_FLAG_IS_ARRAY                   0x100
+
 typedef enum {
         JSONPG_NONE,
-        JSONPG_ROOT,
+        JSONPG_PULL,
         JSONPG_FALSE,
         JSONPG_NULL,
         JSONPG_TRUE,
@@ -24,40 +34,44 @@ typedef enum {
 
 typedef enum {
         JSONPG_ERROR_NONE,
-        JSONPG_ERROR_OPTS,
+        JSONPG_ERROR_OPT,
         JSONPG_ERROR_ALLOC,
         JSONPG_ERROR_PARSE,
         JSONPG_ERROR_NUMBER,
         JSONPG_ERROR_UTF8,
-        JSONPG_ERROR_STACKUNDERFLOW,
-        JSONPG_ERROR_STACKOVERFLOW,
+        JSONPG_ERROR_STACK_UNDERFLOW,
+        JSONPG_ERROR_STACK_OVERFLOW,
         JSONPG_ERROR_FILE_READ,
         JSONPG_ERROR_FILE_WRITE,
         JSONPG_ERROR_EXPECTED_VALUE,
         JSONPG_ERROR_EXPECTED_KEY,
         JSONPG_ERROR_NO_OBJECT,
-        JSONPG_ERROR_NO_ARRAY
+        JSONPG_ERROR_NO_ARRAY,
+        JSONPG_ERROR_ABORT
 } jsonpg_error_code;
 
 typedef struct {
         uint8_t *bytes;
         size_t length;
-} jsonpg_string_val;
+} jsonpg_string_value;
 
 typedef union {
         long integer;
         double real;
-} jsonpg_number_val;
+} jsonpg_number_value;
 
 typedef struct {
         jsonpg_error_code code;
         size_t at;
-} jsonpg_error_val;
+} jsonpg_error_value;
 
-typedef union {
-        jsonpg_number_val number;
-        jsonpg_string_val string;
-        jsonpg_error_val error;
+typedef struct {
+        jsonpg_type type;
+        union {
+                jsonpg_number_value number;
+                jsonpg_string_value string;
+                jsonpg_error_value error;
+        };
 } jsonpg_value;
 
 typedef struct {
@@ -77,7 +91,6 @@ typedef struct {
 typedef struct jsonpg_parser_s    *jsonpg_parser;
 typedef struct jsonpg_generator_s *jsonpg_generator;
 typedef struct jsonpg_dom_s       *jsonpg_dom;
-typedef struct str_buf_s          *jsonpg_buffer;
 
 
 void jsonpg_set_allocators(
@@ -86,91 +99,154 @@ void jsonpg_set_allocators(
                 void (*free)(void *));
 
 typedef struct {
-        uint16_t max_nesting;
-        bool comments;
-        bool trailing_commas;
-        bool optional_commas;
-        bool single_quotes;
-        bool unquoted_keys;
-        bool unquoted_strings;
-        bool escape_characters;
-        bool is_object;
-        bool is_array;
+        uint16_t max_nesting;   // required to track array/object nesting
+        uint16_t flags;          // mask of JSONPG_FLAG_... values above
 } jsonpg_parser_opts;
 
 jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts);
-#define jsonpg_parser_new(...)   jsonpg_parser_new_opt(        \
-                (jsonpg_parser_opts){ .max_nesting = 1024,     \
-                                      .comments = true,        \
-                                      __VA_ARGS__ })           
+#define jsonpg_parser_new(...)   jsonpg_parser_new_opt(     \
+                (jsonpg_parser_opts){ .max_nesting = 1024,  \
+                                       __VA_ARGS__ })           
 
-// jsonpg_parser_new(.max_nesting = 2048, .is_array = true, .unquoted_strings = true);
-// jsonpg_parser_new(.comments = false);
+// Example: create a parser that will permit comments and trailing commas
+// jsonpg_parser_new(.flags = JSONPG_FLAG_COMMENTS 
+//                              | JSONPG_FLAG_TRAILING_COMMAS);
+
+
+// Read JSON from somewhere custom
+typedef struct jsonpg_reader_s *jsonpg_reader;
+struct jsonpg_reader_s {
+        // Like standard read function except first argument is supplied ctx
+        ssize_t (*read)(void *, void *, size_t);
+        void *ctx;
+};
 
 typedef struct {
-        int fd;
-        FILE *stream;
-        uint8_t *bytes;
+        // Optional parser, required for pull parsing
+        jsonpg_parser parser;
+
+        // If no parser is supplied then one will be created using these options
+        // The parser will be freed before returning
+        // See parser_opts above for desriptions
+        uint16_t max_nesting;
+        uint16_t flags;      
+
+        // Input options, specify one type only
+        // If none are supplied then fd = 0 (stdin) is used
+        //
+        // All input is JSON bytes except for the 'dom' option
+        // which is an in-memeory representation of parsed JSON
+        // created by jsonpg_generator_new(.dom = true, ...)
+        int fd;                 // file descriptor
+        uint8_t *bytes;         // input bytes, must set count
         size_t count;
-        char *string;
-        jsonpg_callbacks *callbacks;
-        void *context;
+        char *string;           // NULL terminated C string
+        jsonpg_reader reader;
         jsonpg_dom dom;
+
+        // Optional callbacks and callback ctx for SAX style parsing
+        // This is a common use case so providing the options here
+        // saves the caller having to create and free a generator themselves
+        // Ignored if a parser option is specified
+        jsonpg_callbacks *callbacks;
+        void *ctx;
+
+        // Optional generator
+        // Ignored if callbacks/ctx or parser options are specified
         jsonpg_generator generator;
+
 } jsonpg_parse_opts;
 
-jsonpg_type jsonpg_parse_opt(jsonpg_parser, jsonpg_parse_opts);
-#define jsonpg_parse(X, ...)  jsonpg_parse_opt((X),           \
-                (jsonpg_parse_opts){ .fd = -1,                \
-                                      __VA_ARGS__ })         
+jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts);
+#define jsonpg_parse(...)  jsonpg_parse_opt(              \
+                (jsonpg_parse_opts){ .max_nesting = 1024, \
+                                     __VA_ARGS__ })         
 
-// jsonpg_parse(parser, .stream = stdin, .callback = &my_callbacks, .context = &my_ctx));
-// jsonpg_parse(parser, .bytes = my_input_buffer, .count = 5364);
-// jsonpg_parse(parser, .string = "[ 12, 3.45, true, false, { \"foo\": null }]" );
+// Example, parse a byte buffer and call callbacks with context
+// jsonpg_parse(.bytes = my_bytes, 
+//              .count = my_byte_count, 
+//              .callbacks = my_fns,
+//              .ctx = my_context);
 
-// Pull parser, get next parse event
+
+
+// Pull parser, get next parse event and result
 jsonpg_type jsonpg_parse_next(jsonpg_parser);
-
 jsonpg_value jsonpg_parse_result(jsonpg_parser);
-jsonpg_error_val jsonpg_parse_error(jsonpg_parser);
 
-// Generate parse events from those stored in dom
-jsonpg_type jsonpg_dom_parse(jsonpg_dom, jsonpg_generator);
+// Example, pull parsing from string
+//          allow single quotes to make JSON string creation simpler
+//
+// p = jsonpg_parser_new(.flags = JSONPG_FLAG_SINGLE_QUOTES);
+// jsonpg_parse(.parser = p, .string = "{'k1': [12.5, 'foo']}");
+// 
+// The comments below indicate what JSON items are parsed
+// The actual type of item is returned from jsonpg_parse_next
+// Values are recovered from jsonpg_parse_result(p)
+//
+// jsonpg_parse_next(p); // type: begin_object
+// jsonpg_parse_next(p); // type: key, value: "k1"
+// jsonpg_parse_next(p); // type: begin_array
+// jsonpg_parse_next(p); // type: real, value: 12.5
+// jsonpg_parse_next(p); // type: string, value: "foo"
+// jsonpg_parse_next(p); // type: end_array
+// jsonpg_parse_next(p); // type: end_object
+// jsonpg_parse_next(p); // type: EOF
+// jsonpg_parser_free(p);
+//
 
-jsonpg_dom jsonpg_dom_new(size_t);
-jsonpg_buffer jsonpg_buffer_new(size_t);
 
-char *jsonpg_buffered_string(jsonpg_buffer);
-size_t jsonpg_buffered_bytes(jsonpg_buffer, uint8_t **);
-
+// Write generated JSON to a custom location
+typedef struct jsonpg_writer_s *jsonpg_writer;
+struct jsonpg_writer_s {
+        // Like standard write function except first argument is supplied ctx
+        ssize_t (*write)(void *, const void *, size_t);
+        void *ctx;
+};
 
 typedef struct {
+        // Pretty printing is ignored when writing to DOM or callbacks
+        int indent;             // pretty printing indent, 0 = stringify
+        
+        // Output options, specify one type
+        // Options 'buffer' and 'dom' collect the generated results
+        // These results are available from jsonpg_result_string,
+        // jsonpg_result_bytes or jsonpg_result_dom (see below)
+        bool buffer;
+        bool dom;
         int fd;
-        bool pretty;
-        FILE *stream;
-        jsonpg_buffer buffer;
+        jsonpg_writer writer;
+        jsonpg_callbacks *callbacks;
+        void *ctx;
+
+        // Validation of JSON format, the correct nesting of arrays/objects
+        // And the correct positioning of keys requires the nesting of
+        // these items to be tracked
+        // Set to 0 to disable this tracking
+        // Validation of numerics and UTF8 sequences cannot be disabled
         size_t max_nesting;
+
 } jsonpg_generator_opts;
 
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts);
-#define jsonpg_generator_new(...)  jsonpg_generator_new_opt(      \
-                (jsonpg_generator_opts){ .fd = -1,                \
-                                         .max_nesting = 1024,     \
+#define jsonpg_generator_new(...)  jsonpg_generator_new_opt(    \
+                (jsonpg_generator_opts){ .max_nesting = 1024,   \
                                          __VA_ARGS__ })           
 
-// jsonpg_generator_new(.stream = stdout, .pretty = true);
-// jsonpg_generator_new(.fd = my_file, .max_nesting = 0 );
-
-jsonpg_generator jsonpg_callback(jsonpg_callbacks *, void *);
-jsonpg_generator jsonpg_dom_builder(jsonpg_dom);
-
-jsonpg_error_val jsonpg_generator_error(jsonpg_generator);
+// The lifetime of results is that of their generator.
+// A string or dom returned from these functions should not be used
+// once their generator has been freed
+jsonpg_error_value jsonpg_result_error(jsonpg_generator);
+jsonpg_dom jsonpg_result_dom(jsonpg_generator);
+char *jsonpg_result_string(jsonpg_generator);
+size_t jsonpg_result_bytes(jsonpg_generator, uint8_t **);
 
 void jsonpg_parser_free(jsonpg_parser);
 void jsonpg_generator_free(jsonpg_generator);
-void jsonpg_dom_free(jsonpg_dom);
-void jsonpg_buffer_free(jsonpg_buffer);
 
+// Write JSON items to a generator
+// Macros to make this more concise can be found in
+// jsonpg_def_macros.h
 int jsonpg_null(jsonpg_generator);
 int jsonpg_boolean(jsonpg_generator, bool);
 int jsonpg_integer(jsonpg_generator, long);

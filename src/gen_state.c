@@ -123,13 +123,13 @@ MAPPING_END()
 
 // don't need the value but want to validate config names
 MAPPING(configs)
-MAP("comments", FLAG_COMMENTS)
-MAP("single_quotes", FLAG_SINGLE_QUOTES)
-MAP("unquoted_strings", FLAG_UNQUOTED_STRINGS)
-MAP("unquoted_keys", FLAG_UNQUOTED_KEYS)
-MAP("trailing_commas", FLAG_TRAILING_COMMAS)
-MAP("optional_commas", FLAG_OPTIONAL_COMMAS)
-MAP("escape_characters", FLAG_ESCAPE_CHARACTERS)
+MAP("comments", JSONPG_FLAG_COMMENTS)
+MAP("single_quotes", JSONPG_FLAG_SINGLE_QUOTES)
+MAP("unquoted_strings", JSONPG_FLAG_UNQUOTED_STRINGS)
+MAP("unquoted_keys", JSONPG_FLAG_UNQUOTED_KEYS)
+MAP("trailing_commas", JSONPG_FLAG_TRAILING_COMMAS)
+MAP("optional_commas", JSONPG_FLAG_OPTIONAL_COMMAS)
+MAP("escape_characters", JSONPG_FLAG_ESCAPE_CHARACTERS)
 MAPPING_END()
 
 typedef enum {

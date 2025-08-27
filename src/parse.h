@@ -9,16 +9,6 @@
 
 #define STACK_SIZE 1024
 
-#define FLAG_COMMENTS                   0x01
-#define FLAG_TRAILING_COMMAS            0x02
-#define FLAG_SINGLE_QUOTES              0x04
-#define FLAG_UNQUOTED_KEYS              0x08
-#define FLAG_UNQUOTED_STRINGS           0x10
-#define FLAG_ESCAPE_CHARACTERS          0x20
-#define FLAG_OPTIONAL_COMMAS            0x40
-#define FLAG_IS_OBJECT                  0x80
-#define FLAG_IS_ARRAY                   0x100
-
 #define CTX_TO_INT(X) ((int)(int64_t)X)
 #define INT_TO_CTX(X)   ((void *)(int64_t)X)
 
@@ -45,10 +35,9 @@ typedef struct token_s {
         uint8_t *pos;
 } *token;
 
-
-
 typedef struct str_buf_s *str_buf;
-typedef struct reader_s *reader;
+typedef struct jsonpg_reader_s reader;
+typedef struct dom_info_s dom_info;
 
 struct jsonpg_parser_s {
         uint8_t seen_eof;
@@ -61,11 +50,12 @@ struct jsonpg_parser_s {
         uint8_t *input;   
         uint8_t *current;
         uint8_t *last;
+        size_t input_seen;
         str_buf write_buf;
-        reader reader;
+        ssize_t (*read_fn)(void *, void *, size_t);
+        void *read_ctx;
+        dom_info dom_info;
         jsonpg_value result;
-        bool generator_is_ours;
-        jsonpg_generator generator;
         struct token_s tokens[TOKEN_MAX];
         struct stack_s stack;
 };

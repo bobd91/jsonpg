@@ -20,9 +20,9 @@ static void dump_p(jsonpg_parser p)
 
 }
 
-static jsonpg_error_val make_error(jsonpg_error_code code, size_t at)
+static jsonpg_error_value make_error(jsonpg_error_code code, size_t at)
 {
-        return (jsonpg_error_val){ .code = code, .at = at };
+        return (jsonpg_error_value){ .code = code, .at = at };
 }
 
 static jsonpg_type set_result_error(jsonpg_parser p, jsonpg_error_code code) 
