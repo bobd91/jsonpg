@@ -17,7 +17,6 @@ struct print_ctx_s {
         char *indent;
         write_fn write;
         void *write_ctx;
-        void (*free_write_ctx)(void *);
         jsonpg_generator g;
 };
 
@@ -300,43 +299,30 @@ static jsonpg_callbacks printer_callbacks = {
         .error = print_error
 };
 
-static void print_ctx_free(void *p)
-{
-        print_ctx ctx = p;
-        if(ctx->free_write_ctx)
-                (*(ctx->free_write_ctx))(ctx->write_ctx);
-        pg_dealloc(ctx);
-}
-
 static jsonpg_generator print_generator(
+                jsonpg_generator g,
                 write_fn write, 
                 void *write_ctx, 
-                void (*free_write_ctx)(void *),
-                int indent, 
-                uint16_t stack_size)
+                int indent)
 {
-        print_ctx ctx = pg_alloc(sizeof(struct print_ctx_s) + indent + 1);
-        if(!ctx)
-                return NULL;
-
-        jsonpg_generator g = generator_new(
-                        &printer_callbacks, 
-                        ctx, 
-                        print_ctx_free,
-                        stack_size);
-
-        if(!g) {
-                pg_dealloc(ctx);
+        print_ctx ctx = arena_alloc(
+                        g->arena,
+                        sizeof(struct print_ctx_s) + indent + 1);
+        if(!ctx) {
+                jsonpg_generator_free(g);
                 return NULL;
         }
 
+        g->callbacks = &printer_callbacks;
+        g->ctx = ctx;
+        
         ctx->level = 0;
         ctx->comma = 0;
         ctx->key = 0;
         if(indent) {
                 ctx->pretty = true;
                 ctx->indent = sizeof(struct print_ctx_s) + (void *)ctx;
-                for(int i ; i < indent ;i++)
+                for(int i = 0; i < indent ;i++)
                         ctx->indent[i] = ' ';
                 ctx->indent[indent] = '\0';
         } else {
@@ -345,7 +331,6 @@ static jsonpg_generator print_generator(
         ctx->nl = 0;
         ctx->write = write;
         ctx->write_ctx = write_ctx;
-        ctx->free_write_ctx = free_write_ctx;
 
         // For reporting generator errors
         ctx->g = g;
@@ -386,19 +371,23 @@ static ssize_t write_buffer(void *ctx, const void *bytes, size_t count)
         return str_buf_append(sbuf, bytes, count);
 }
 
-jsonpg_generator file_printer(int fd, int indent, int stack_size)
+static jsonpg_generator file_printer(jsonpg_generator g, int fd, int indent)
 {
-        return print_generator(write_fd, INT_TO_CTX(fd), NULL, indent, stack_size);
+        return print_generator(g, write_fd, INT_TO_CTX(fd), indent);
 }
 
-jsonpg_generator buffer_printer(int indent, int stack_size)
+static jsonpg_generator buffer_printer(jsonpg_generator g, int indent)
 {
-        return print_generator(write_buffer, str_buf_new(0), str_buf_free, indent, stack_size);
+        str_buf sbuf = str_buf_new(g->arena, 0);
+        if(!sbuf)
+                return NULL;
+
+        return print_generator(g, write_buffer, sbuf, indent);
 }
 
-jsonpg_generator write_printer(jsonpg_writer writer, int indent, int stack_size)
+static jsonpg_generator write_printer(jsonpg_generator g, jsonpg_writer writer, int indent)
 {
-        return print_generator(writer->write, writer->ctx, NULL, indent, stack_size);
+        return print_generator(g, writer->write, writer->ctx, indent);
 
 }
 

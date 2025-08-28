@@ -14,6 +14,7 @@
 #define write_c(X)      (str_buf_append_c(p->write_buf, (X)))
 #define get_content(X)  (str_buf_content(p->write_buf, (X)))
 
+
 // must be same size and order as token_type
 static int token_type_info[] = {
         TOKEN_INFO_DEFAULT,
@@ -232,8 +233,6 @@ static int input_read(jsonpg_parser p, uint8_t *start)
 
 static int parser_read_next(jsonpg_parser p)
 {
-        assert(p->input_is_ours && "Cannot reuse user supplied buffer");
-
         p->processed += p->current - p->input;
         uint8_t *start = p->input;
         if(p->token_ptr > 0) {
@@ -296,13 +295,9 @@ void jsonpg_parser_free(jsonpg_parser p)
         if(!p)
                 return;
 
-        if(p->input_is_ours)
-                pg_dealloc(p->input);
-        str_buf_free(p->write_buf);
-        pg_dealloc(p);
+        arena_free(p->arena);   
 }
 
-jsonpg_type parse_next(jsonpg_parser);
 
 jsonpg_type jsonpg_parse_next(jsonpg_parser p)
 {
@@ -340,7 +335,6 @@ static void parser_set_bytes(
         p->processed = 0;
         p->input = p->current = bytes;
         p->input_size = count;
-        p->input_is_ours = false;
         p->last = bytes + count;
         p->seen_eof = 1;
         p->stack.ptr = p->stack.ptr_min;
@@ -357,11 +351,10 @@ static jsonpg_type parser_set_reader(
                 void *ctx)
 {
         p->processed = 0;
-        p->input = p->current = pg_alloc(BUF_SIZE);
+        p->input = p->current = arena_alloc(p->arena, BUF_SIZE);
         if(!p->input)
                 return alloc_error(p);
         p->input_size = BUF_SIZE;
-        p->input_is_ours = true;
 
         p->read_fn = read_fn;
         p->read_ctx = ctx;
@@ -387,14 +380,10 @@ void parser_set_dom_info(jsonpg_parser p, dom_info di)
 
 jsonpg_parser parser_reset(jsonpg_parser p)
 {
-        if(p->input_is_ours)
-                pg_dealloc(p->input);
-
         p->write_buf = str_buf_reset(p->write_buf);
         
         p->processed = 0;
         p->input = NULL;
-        p->input_is_ours = false;
         p->read_fn = NULL;
         p->read_ctx = NULL;
 
@@ -457,11 +446,12 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
         }
 
         if(opts.callbacks) {
-                g = callback_generator(opts.callbacks, opts.ctx);
+                g = generator_new(0);
                 if(!g) {
                         alloc_error(p);
                         return p->result;
                 }
+                generator_set_callbacks(g, opts.callbacks, opts.ctx);
         } else {
                 g = generator_reset(opts.generator);
         }
@@ -488,16 +478,19 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
         size_t struct_bytes = sizeof(struct jsonpg_parser_s);
         // 1-8 => 1, 9-16 => 2, etc
         size_t stack_bytes = (stack_size + 7) / 8;
-        jsonpg_parser p = pg_alloc(struct_bytes + stack_bytes);
+        arena a = arena_new();
+        if(!a)
+                return NULL;
+        jsonpg_parser p = arena_alloc(a, struct_bytes + stack_bytes);
         if(p) {
-                p->write_buf = str_buf_empty();
+                p->arena = a;
+                p->write_buf = str_buf_empty(a);
                 if(!p->write_buf) {
-                        pg_dealloc(p);
+                        jsonpg_parser_free(p);
                         return NULL;
                 }
 
                 p->input = NULL;
-                p->input_is_ours = false;
 
                 p->read_fn = NULL;
                 p->read_ctx = NULL;

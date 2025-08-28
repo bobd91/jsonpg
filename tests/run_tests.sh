@@ -14,6 +14,10 @@ passed_msg() {
         echo -e "${passed}${1}${reset}"
 }
 
+if [ ! -d json/failed ]; then
+        mkdir json/failed
+fi
+
 for infile in json/input/*.json; do
         file=$(basename $infile)
         outfile="json/passed/$file"

@@ -40,12 +40,12 @@ typedef struct jsonpg_reader_s reader;
 typedef struct dom_info_s dom_info;
 
 struct jsonpg_parser_s {
+        arena arena;
         uint8_t seen_eof;
         uint8_t token_ptr;
         uint8_t state;
         uint8_t push_state;
         uint16_t flags;
-        bool input_is_ours;
         uint32_t input_size;
         uint8_t *input;   
         uint8_t *current;

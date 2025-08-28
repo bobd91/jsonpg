@@ -9,6 +9,7 @@ typedef struct dom_type_s dom_type;
 
 
 struct jsonpg_dom_s {
+        arena arena;
         dom_hdr next;
         dom_hdr current;
         size_t count;
@@ -29,7 +30,7 @@ struct dom_node_s {
         } is;
 };
 
-dom_info dom_parser_info(jsonpg_dom dom)
+static dom_info dom_parser_info(jsonpg_dom dom)
 {
         dom_info di;
         di.hdr = dom;
@@ -43,6 +44,7 @@ static size_t dom_size_align(size_t size)
         return NODE_SIZE * (1 + ((size - 1) / NODE_SIZE));
 }
 
+
 // Ensure minimum size
 static size_t dom_node_size(size_t size)
 {
@@ -52,11 +54,11 @@ static size_t dom_node_size(size_t size)
         return dom_size_align(size);
 }
 
-static dom_hdr dom_hdr_new(size_t size)
+static dom_hdr dom_hdr_new(arena a, size_t size)
 {
         size = dom_node_size(size + sizeof(struct jsonpg_dom_s));
 
-        dom_hdr hdr = pg_alloc(size);
+        dom_hdr hdr = arena_alloc(a, size);
 
         if(!hdr)
                 return NULL;
@@ -71,15 +73,10 @@ static dom_hdr dom_hdr_new(size_t size)
 
 static dom_node dom_node_next(dom_hdr root, size_t count)
 {
-        size_t required = dom_size_align(count + NODE_SIZE);
+        size_t required = count + NODE_SIZE;
         dom_hdr hdr = root->current;
         if(required > hdr->size - hdr->count) {
-                // Should we always make new or sometimes realloc
-                // to avoid lots of wasted space?
-                // can't realloc root due to risk of invalidating ptr
-                // handed to us.
-                // Leave for now and accept memory loss
-                dom_hdr new = dom_hdr_new(required);
+                dom_hdr new = dom_hdr_new(root->arena, required);
 
                 if(!new)
                         return NULL;
@@ -91,8 +88,6 @@ static dom_node dom_node_next(dom_hdr root, size_t count)
         size_t offset = hdr->count;
         hdr->count += required;
         return (dom_node)(offset + (void *)hdr);
-
-
 }
 
 static dom_node dom_add_type(dom_hdr root, jsonpg_type type, size_t count)
@@ -216,28 +211,15 @@ static jsonpg_callbacks dom_callbacks = {
         .end_object = dom_end_object,
 };
 
-jsonpg_dom dom_new(size_t size)
+jsonpg_dom dom_new(arena a, size_t size)
 {
-        jsonpg_dom dom = dom_hdr_new(size);
-        if(!dom)
+        jsonpg_dom root = dom_hdr_new(a, size);
+        if(!root)
                 return NULL;
 
-        dom->current = dom;
-        return dom;
-}
-
-void dom_free(void *p)
-{
-        jsonpg_dom dom = p;
-        if(!dom) 
-                return;
-
-        jsonpg_dom next;
-        while(dom) {
-                next = dom->next;
-                pg_dealloc(dom);
-                dom = next;
-        }
+        root->arena = a;
+        root->current = root;
+        return root;
 }
 
 jsonpg_dom jsonpg_result_dom(jsonpg_generator g)
@@ -245,16 +227,16 @@ jsonpg_dom jsonpg_result_dom(jsonpg_generator g)
         return g->ctx;
 }
 
-jsonpg_generator dom_generator(void)
+static jsonpg_generator dom_generator(jsonpg_generator g)
 {
-        jsonpg_dom dom = dom_new(0);
-        if(!dom)
+        jsonpg_dom root = dom_new(g->arena, 0);
+        if(!root)
                 return NULL;
 
-        return generator_new(&dom_callbacks, dom, dom_free, 0);
+        return generator_set_callbacks(g, &dom_callbacks, root);
 }
 
-jsonpg_type dom_parse_next(jsonpg_parser p)
+static jsonpg_type dom_parse_next(jsonpg_parser p)
 {
         jsonpg_dom hdr = p->dom_info.hdr;
         size_t offset = p->dom_info.offset;

@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
                         exit(1);
                 }
 
-                g = jsonpg_generator_new(.fd = fileno(stdout), .max_nesting = 0);
+                g = jsonpg_generator_new(.fd = fileno(stdout), .indent = 2);
                 res = jsonpg_parse(.fd = fd, .generator = g);
                 jsonpg_generator_free(g);
         } else if(argc == 3) {
@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
                         char *json = argv[2];
                         size_t len = strlen(json);
                         memcpy(buf, json, len + 1);
-                        g = jsonpg_generator_new(.fd = fileno(stdout), .max_nesting = 0);
+                        g = jsonpg_generator_new(.fd = fileno(stdout), .indent = 2);
                         res = jsonpg_parse(.bytes = buf, .count = len, .generator = g);
                         jsonpg_generator_free(g);
                         if(JSONPG_ERROR == res.type) {
@@ -78,10 +78,20 @@ int main(int argc, char *argv[])
                                                 jsonpg_generator g = jsonpg_generator_new(.dom = true, .max_nesting = 0);
                                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                                 if(res.type == JSONPG_ERROR) {
-                                                        perror("Parse failed");
+                                                        perror("Parse 1 failed");
+                                                        exit(1);
+                                                }
+                                                jsonpg_dom dom = jsonpg_result_dom(g);
+                                                jsonpg_generator g2 = jsonpg_generator_new(.buffer = true);
+                                                res = jsonpg_parse(.dom = dom, .generator = g2);
+                                                if(res.type == JSONPG_ERROR) {
+                                                        perror("Parse 2 failed");
                                                         exit(1);
                                                 }
                                                 jsonpg_generator_free(g);
+                                                char *s = jsonpg_result_string(g2);
+                                                printf("JSON length: %ld\n", strlen(s));
+                                                jsonpg_generator_free(g2);
                                         }
                                         free(buf);
                                         int ret = (res.type == JSONPG_EOF) ? 0 : 1;

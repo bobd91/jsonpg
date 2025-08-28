@@ -3,11 +3,13 @@
 
 static int cannot_value(jsonpg_generator g)
 {
-        if(g->stack.size
-                        && peek_stack(&g->stack) == STACK_OBJECT
-                        && g->key_next) {
-                g->error = make_error(JSONPG_ERROR_EXPECTED_KEY, g->count);
-                return 1;
+        if(g->stack.size && peek_stack(&g->stack) == STACK_OBJECT) {
+                if(g->key_next) {
+                        g->error = make_error(JSONPG_ERROR_EXPECTED_KEY, g->count);
+                        return 1;
+                } else {
+                        g->key_next = true;
+                }
         }
         return 0;
 
@@ -19,7 +21,7 @@ static int cannot_key(jsonpg_generator g)
                 g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE, g->count);
                 return 1;
         }
-        g->key_next = 0;
+        g->key_next = false;
         return 0;
 }
 
@@ -182,21 +184,18 @@ static int generate(jsonpg_generator g, jsonpg_type type, jsonpg_value *value)
         }
 }
 
-jsonpg_generator generator_new(
-                jsonpg_callbacks *callbacks, 
-                void *ctx,
-                void (*free_ctx)(void *),
-                uint16_t stack_size)
+static jsonpg_generator generator_new(uint16_t stack_size)
 {
-        jsonpg_generator g = pg_alloc(sizeof(struct jsonpg_generator_s)
+        arena a = arena_new();
+        if(!a)
+                return NULL;
+        jsonpg_generator g = arena_alloc(a, sizeof(struct jsonpg_generator_s)
                         + (stack_size >> 3));
         if(!g)
                 return NULL;
-        g->callbacks = callbacks;
-        g->ctx = ctx;
-        g->free_ctx = free_ctx;
 
-        g->key_next = 0;
+        g->arena = a;
+        g->key_next = false;
 
         g->stack = (struct stack_s) {
                 .ptr = 0,
@@ -208,20 +207,22 @@ jsonpg_generator generator_new(
         return g;
 }
 
+static jsonpg_generator generator_set_callbacks(
+                jsonpg_generator g,
+                jsonpg_callbacks *callbacks, 
+                void *ctx)
+{
+        g->callbacks = callbacks;
+        g->ctx = ctx;
+        return g;
+}
+
 void jsonpg_generator_free(jsonpg_generator g)
 {
         if(!g)
                 return;
 
-        if(g->free_ctx)
-                (*g->free_ctx)(g->ctx);
-
-        pg_dealloc(g);
-}
-
-jsonpg_generator callback_generator(jsonpg_callbacks *callbacks, void *ctx)
-{
-        return generator_new(callbacks, ctx, NULL, 0);
+        arena_free(g->arena);
 }
 
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
@@ -232,16 +233,26 @@ jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
                         + (opts.writer != NULL)
                         + (opts.callbacks != NULL))
                 return NULL;
+        
+        int indent = opts.indent;
+        if(indent < 0)
+                indent = 0;
+        else if (indent > 8)
+                indent = 8;
+
+        jsonpg_generator g = generator_new(opts.max_nesting);
+        if(!g)
+                return NULL;
 
         if(opts.fd > 0)
-                return file_printer(opts.fd, opts.indent, opts.max_nesting);
+                return file_printer(g, opts.fd, indent);
         else if(opts.buffer)
-                return buffer_printer(opts.indent, opts.max_nesting);
+                return buffer_printer(g, indent);
         else if(opts.writer)
-                return write_printer(opts.writer, opts.indent, opts.max_nesting);
+                return write_printer(g, opts.writer, indent);
         else if(opts.dom)
-                return dom_generator();
+                return dom_generator(g);
         else
-                return callback_generator(opts.callbacks, opts.ctx);
+                return generator_set_callbacks(g, opts.callbacks, opts.ctx);
 
 }

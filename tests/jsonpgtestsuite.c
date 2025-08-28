@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "jsonpg.h"
+#include "../src/jsonpg.h"
 
 int main(int argc, char *argv[]) {
         if(2 != argc) 

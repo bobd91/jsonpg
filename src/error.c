@@ -25,7 +25,7 @@ static void dump_g(jsonpg_generator g)
 {
         fprintf(stderr, "Generator Error:\n");
         fprintf(stderr, "Error: %d\n", g->error.code);
-        fprintf(stderr, "At Token: %ld\n", p->error.at);
+        fprintf(stderr, "At Token: %ld\n", g->error.at);
         fprintf(stderr, "Stack Size: %d\n", g->stack.size);
         fprintf(stderr, "Stack Pointer: %d\n", g->stack.ptr);
         fprintf(stderr, "Stack: ");

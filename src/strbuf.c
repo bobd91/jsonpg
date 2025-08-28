@@ -4,17 +4,20 @@
 typedef struct str_buf_s *str_buf;
 
 struct str_buf_s {
+        arena arena;
         uint8_t *bytes;
         size_t count;
         size_t size;    
 };
 
 
-static str_buf str_buf_empty()
+static str_buf str_buf_empty(arena a)
 {
-        str_buf sbuf = pg_alloc(sizeof(struct str_buf_s));
-        if(!sbuf)
+        str_buf sbuf = arena_alloc(a, sizeof(struct str_buf_s));
+        if(!sbuf) {
                 return NULL;
+        }
+        sbuf->arena = a;
         sbuf->bytes = NULL;
         sbuf->count = 0;
         sbuf->size = 0;
@@ -31,9 +34,9 @@ static str_buf str_buf_alloc(str_buf sbuf, size_t size)
 {
         size = size >= BUF_SIZE ? size : BUF_SIZE;
 
-        sbuf->bytes = pg_alloc(size);
+        sbuf->bytes = arena_alloc(sbuf->arena, size);
         if(!sbuf->bytes) {
-                pg_dealloc(sbuf);
+                arena_free(sbuf->arena);
                 return NULL;
         }
         sbuf->size = size;
@@ -46,21 +49,12 @@ static str_buf str_buf_alloc_new(str_buf sbuf)
         return str_buf_alloc(sbuf, BUF_SIZE);
 }
 
-static str_buf str_buf_new(size_t size)
+static str_buf str_buf_new(arena a, size_t size)
 {
-        str_buf sbuf = str_buf_empty();
+        str_buf sbuf = str_buf_empty(a);
         if(!sbuf)
                 return NULL;
         return str_buf_alloc(sbuf, size);
-}
-
-static void str_buf_free(void *p)
-{
-        str_buf sbuf = p;
-        if(sbuf) {
-                pg_dealloc(sbuf->bytes);
-                pg_dealloc(sbuf);
-        }
 }
 
 static int str_buf_append(str_buf sbuf, const uint8_t *bytes, size_t count)
@@ -71,15 +65,18 @@ static int str_buf_append(str_buf sbuf, const uint8_t *bytes, size_t count)
         int new_count = sbuf->count + count;
 
         if(new_count > sbuf->size) {
+                size_t new_size = sbuf->size;
                 do {
-                        sbuf->size <<= 1;
-                } while(new_count > sbuf->size);
-                uint8_t *b = pg_realloc(sbuf->bytes, sbuf->size);
-                if(!b) {
-                        str_buf_free(sbuf);
+                        new_size <<= 1;
+                } while(new_count > new_size);
+                uint8_t *b = arena_realloc(
+                                sbuf->arena, 
+                                sbuf->bytes, 
+                                new_size);
+                if(!b)
                         return -1;
-                }
 
+                sbuf->size = new_size;
                 sbuf->bytes = b;
         }
         memcpy(sbuf->bytes + sbuf->count, bytes, count);
