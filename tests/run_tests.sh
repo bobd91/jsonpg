@@ -14,7 +14,7 @@ passed_msg() {
         echo -e "${passed}${1}${reset}"
 }
 
-for infile in json/input/*number*.json; do
+for infile in json/input/*.json; do
         file=$(basename $infile)
         outfile="json/passed/$file"
         if ./jsonpg $infile > temp.json 2>/dev/null; then
