@@ -17,8 +17,8 @@
 typedef enum {
         JSONPG_NONE,
         JSONPG_PULL,
-        JSONPG_FALSE,
         JSONPG_NULL,
+        JSONPG_FALSE,
         JSONPG_TRUE,
         JSONPG_INTEGER,
         JSONPG_REAL,

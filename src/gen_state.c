@@ -269,7 +269,7 @@ char result_char(jsonpg_parser p)
 
 char *result_str(jsonpg_parser p)
 {
-        string_val s = jsonpg_parse_result(p).string;
+        jsonpg_string_value s = jsonpg_parse_result(p).string;
         char *ptr = fmalloc(1 + s.length);
         memcpy(ptr, s.bytes, s.length);
         ptr[s.length] = '\0';
@@ -1447,7 +1447,8 @@ int main(int argc, char *argv[])
         }
 
         jsonpg_parser p = jsonpg_parser_new();
-        jsonpg_type type = jsonpg_parse(p, .stream = stream);
+        jsonpg_value val = jsonpg_parse(.parser = p, .fd = fileno(stream));
+        jsonpg_type type = val.type;
         if(type != JSONPG_EOF && type != JSONPG_ERROR) {
                 type = jsonpg_parse_next(p);
                 if(JSONPG_BEGIN_OBJECT == type) {

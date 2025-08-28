@@ -149,11 +149,6 @@ static jsonpg_generator generator_reset(jsonpg_generator g)
         return g;
 }
 
-static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
-{
-        g->error = make_error(code, g->count);
-}
-        
 static int generate(jsonpg_generator g, jsonpg_type type, jsonpg_value *value)
 {
         g->count++;
@@ -186,6 +181,7 @@ static int generate(jsonpg_generator g, jsonpg_type type, jsonpg_value *value)
                 return 1;
         }
 }
+
 jsonpg_generator generator_new(
                 jsonpg_callbacks *callbacks, 
                 void *ctx,
@@ -237,7 +233,7 @@ jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
                         + (opts.callbacks != NULL))
                 return NULL;
 
-        if(opts.fd >= 0)
+        if(opts.fd > 0)
                 return file_printer(opts.fd, opts.indent, opts.max_nesting);
         else if(opts.buffer)
                 return buffer_printer(opts.indent, opts.max_nesting);

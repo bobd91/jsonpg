@@ -50,7 +50,7 @@ struct jsonpg_parser_s {
         uint8_t *input;   
         uint8_t *current;
         uint8_t *last;
-        size_t input_seen;
+        size_t processed;
         str_buf write_buf;
         ssize_t (*read_fn)(void *, void *, size_t);
         void *read_ctx;

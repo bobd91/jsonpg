@@ -210,7 +210,7 @@ static int print_real(void *ctx, double d)
                 return -1;
         }
         print_prefix(ctx);
-        int r = snprintf(number_buffer, sizeof(number_buffer), "%16g", d);
+        int r = snprintf(number_buffer, sizeof(number_buffer), "%.16g", d);
         if(r < 0) {
                 set_print_error(ctx, JSONPG_ERROR_NUMBER);
                 return -1;

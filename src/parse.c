@@ -234,6 +234,7 @@ static int parser_read_next(jsonpg_parser p)
 {
         assert(p->input_is_ours && "Cannot reuse user supplied buffer");
 
+        p->processed += p->current - p->input;
         uint8_t *start = p->input;
         if(p->token_ptr > 0) {
                 // We have a token on the stack
@@ -325,7 +326,7 @@ static jsonpg_value parse(jsonpg_parser p, jsonpg_generator g)
                         ? g->error
                         : make_error(JSONPG_ERROR_ABORT, 0);
         } else {
-                val = p->result;
+                val = (jsonpg_value) { .type = JSONPG_EOF };
         }
 
         return val;
@@ -336,6 +337,7 @@ static void parser_set_bytes(
                 uint8_t *bytes, 
                 size_t count)
 {
+        p->processed = 0;
         p->input = p->current = bytes;
         p->input_size = count;
         p->input_is_ours = false;
@@ -349,14 +351,15 @@ static void parser_set_bytes(
         p->current += utf8_bom_bytes(p->input, p->input_size);
 }
 
-static void parser_set_reader(
+static jsonpg_type parser_set_reader(
                 jsonpg_parser p, 
                 ssize_t (*read_fn)(void *, void *, size_t),
                 void *ctx)
 {
-        p->input = pg_alloc(BUF_SIZE);
+        p->processed = 0;
+        p->input = p->current = pg_alloc(BUF_SIZE);
         if(!p->input)
-                return error_alloc(0);
+                return alloc_error(p);
         p->input_size = BUF_SIZE;
         p->input_is_ours = true;
 
@@ -365,7 +368,7 @@ static void parser_set_reader(
 
         int l = input_read(p, p->input);
         if(l < 0)
-                return error_file_read(0);
+                return file_read_error(p);
         p->seen_eof = (0 == l);
         p->stack.ptr = p->stack.ptr_min;
         p->token_ptr = 0;
@@ -373,6 +376,8 @@ static void parser_set_reader(
 
         // Skip leading byte order mark
         p->current += utf8_bom_bytes(p->input, p->input_size);
+
+        return JSONPG_NONE;
 }
 
 void parser_set_dom_info(jsonpg_parser p, dom_info di)
@@ -387,6 +392,7 @@ jsonpg_parser parser_reset(jsonpg_parser p)
 
         p->write_buf = str_buf_reset(p->write_buf);
         
+        p->processed = 0;
         p->input = NULL;
         p->input_is_ours = false;
         p->read_fn = NULL;
@@ -409,7 +415,7 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
                                 .max_nesting = opts.max_nesting,
                                 .flags = opts.flags);
                 if(!p)
-                        return error_alloc(0);
+                        return make_error_return(JSONPG_ERROR_ALLOC, 0);
         }
 
         int input_opt_count = 
@@ -419,14 +425,18 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
                         + (opts.reader != NULL)
                         + (opts.dom != NULL);
 
-        if(1 < input_opt_count)
-                return error_alloc(0);
+        if(1 < input_opt_count) {
+                alloc_error(p);
+                return p->result;
+        }
 
-        if(opts.fd >= 0 || input_opt_count == 0) {
+        if(opts.fd > 0 || input_opt_count == 0) {
                 int fd = opts.fd > 0 ? opts.fd : 0;
-                parser_set_reader(p, read_fd, INT_TO_CTX(fd));
+                if(parser_set_reader(p, read_fd, INT_TO_CTX(fd)))
+                        return p->result;
         } else if(opts.reader) {
-                parser_set_reader(p, opts.reader->read, opts.reader->ctx);
+                if(parser_set_reader(p, opts.reader->read, opts.reader->ctx))
+                        return p->result;
         } else if(opts.bytes) {
                  parser_set_bytes(p, opts.bytes, opts.count);
         } else if(opts.string) {
@@ -436,16 +446,22 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
         }
 
         // Pull parsing, output opts ignored
-        if(opts.parser)
-                return value_result(JSONPG_PULL);
+        if(opts.parser) {
+                p->result.type = JSONPG_PULL;
+                return p->result;
+        }
 
-        if(1 != (opts.callbacks != NULL) + (opts.generator != NULL))
-                return error_value(JSONPG_ERROR_OPTS, 0);
+        if(1 != (opts.callbacks != NULL) + (opts.generator != NULL)) {
+                opt_error(p);
+                return p->result;
+        }
 
         if(opts.callbacks) {
                 g = callback_generator(opts.callbacks, opts.ctx);
-                if(!g)
-                        return error_alloc(0);
+                if(!g) {
+                        alloc_error(p);
+                        return p->result;
+                }
         } else {
                 g = generator_reset(opts.generator);
         }
