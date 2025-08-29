@@ -16,17 +16,13 @@ struct jsonpg_dom_s {
         size_t size;
 };
 
-struct dom_type_s {
-        jsonpg_type type;
-        size_t count;
-};
-
 struct dom_node_s {
         union {
-                dom_type type;
+                jsonpg_type type;
+                size_t count;
                 double real;
                 long integer;
-                uint8_t bytes[8];
+                uint8_t bytes[sizeof(size_t)];
         } is;
 };
 
@@ -46,7 +42,7 @@ static size_t dom_size_align(size_t size)
 
 
 // Ensure minimum size
-static size_t dom_node_size(size_t size)
+static size_t dom_alloc_size(size_t size)
 {
         size = size < DOM_MIN_SIZE 
                 ? DOM_MIN_SIZE 
@@ -56,7 +52,7 @@ static size_t dom_node_size(size_t size)
 
 static dom_hdr dom_hdr_new(arena a, size_t size)
 {
-        size = dom_node_size(size + sizeof(struct jsonpg_dom_s));
+        size = dom_alloc_size(size + sizeof(struct jsonpg_dom_s));
 
         dom_hdr hdr = arena_alloc(a, size);
 
@@ -73,7 +69,7 @@ static dom_hdr dom_hdr_new(arena a, size_t size)
 
 static dom_node dom_node_next(dom_hdr root, size_t count)
 {
-        size_t required = count + NODE_SIZE;
+        size_t required = dom_size_align(count + 2 * NODE_SIZE);
         dom_hdr hdr = root->current;
         if(required > hdr->size - hdr->count) {
                 dom_hdr new = dom_hdr_new(root->arena, required);
@@ -95,8 +91,9 @@ static dom_node dom_add_type(dom_hdr root, jsonpg_type type, size_t count)
         dom_node node = dom_node_next(root, count);
         if(!node)
                 return NULL;
-        node->is.type.type = type;
-        node->is.type.count = count;
+        node->is.type = type;
+        node++;
+        node->is.count = count;
 
         return node;
 }
@@ -250,8 +247,10 @@ static jsonpg_type dom_parse_next(jsonpg_parser p)
 
         dom_node node = (dom_node)(offset + (void *)hdr);
         offset += NODE_SIZE;
-        jsonpg_type type = node->is.type.type;
-        size_t count = node->is.type.count;
+        jsonpg_type type = node->is.type;
+        node++;
+        offset += NODE_SIZE;
+        size_t count = node->is.count;
         switch(type) {
         case JSONPG_INTEGER:
                 node++;

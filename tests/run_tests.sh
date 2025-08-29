@@ -1,5 +1,10 @@
 #!/bin/bash
 
+root_dir="json"
+input_dir="${root_dir}/input"
+passed_dir="${root_dir}/passed"
+pretty_dir="${root_dir}/pretty"
+failed_dir="${root_dir}/failed"
 pcount=0
 fcount=0
 passed="\e[1;32m"
@@ -14,32 +19,43 @@ passed_msg() {
         echo -e "${passed}${1}${reset}"
 }
 
-if [ ! -d json/failed ]; then
-        mkdir json/failed
+if [ ! -d "$failed_dir" ]; then
+        mkdir "$failed_dir"
 fi
 
-for infile in json/input/*.json; do
+for infile in ${input_dir}/*.json; do
         file=$(basename $infile)
-        outfile="json/passed/$file"
-        if ./jsonpg $infile > temp.json 2>/dev/null; then
-                if [ ! -f $outfile ]; then
-                        ((++fcount))
-                        failed_msg "Unexpected pass: ${file}"
-                elif ! diff -w temp.json $outfile > /dev/null; then
-                        ((++fcount))
-                        failed_msg "Unexpected output: $file"
+        for s in {1..28}; do
+                outdir=$passed_dir
+                for p in 13 14 17 18 21 22 25 26; do
+                        if [ $s -eq $p ]; then
+                                outdir=$pretty_dir
+                                break
+                        fi
+                done
+                outfile="${outdir}/${file}"
+#                echo "Parse -s $s $infile and compare with $outfile"
+                if ./jsonpg -s $s $infile > temp.json 2>/dev/null; then
+                        if [ ! -f $outfile ]; then
+                                ((++fcount))
+                                failed_msg "Unexpected pass: ${file}"
+                        elif ! diff -w temp.json $outfile > /dev/null; then
+                                ((++fcount))
+                                failed_msg "Unexpected output: $file"
+                        else
+                                ((++pcount))
+                        fi
                 else
-                        ((++pcount))
+                        if [ -f $outfile ]; then
+                                ((++fcount))
+                                failed_msg "Unexpected fail: $file"
+                        else
+                                ((++pcount))
+                        fi
+                        cp $infile json/failed
                 fi
-        else
-                if [ -f $outfile ]; then
-                        ((++fcount))
-                        failed_msg "Unexpected fail: $file"
-                else
-                        ((++pcount))
-                fi
-                cp $infile json/failed
-        fi
+        done
+        
 done
 
 if [ -f temp.json ]; then

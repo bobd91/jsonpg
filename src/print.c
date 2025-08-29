@@ -357,7 +357,8 @@ static ssize_t write_fd(void *ctx, const void *bytes, size_t count)
 
 char *jsonpg_result_string(jsonpg_generator g)
 {
-        return str_buf_content_str(g->ctx);
+        print_ctx ctx = g->ctx;
+        return str_buf_content_str(ctx->write_ctx);
 }
 
 size_t jsonpg_result_bytes(jsonpg_generator g, uint8_t **bytes)
