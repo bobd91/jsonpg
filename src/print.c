@@ -215,12 +215,7 @@ static int print_real(void *ctx, double d)
                 return -1;
         }
 
-        // snprintf(%16g) writes at the bak of the buffer
-        // so we get lots of leading spaces
-        char *s = number_buffer;
-        while(*s == ' ')
-                s++;
-        if(write_s(ctx, s))
+        if(write_s(ctx, number_buffer))
                 return -1;
 
         // real number without decimal point or exponent

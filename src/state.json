@@ -110,10 +110,11 @@
         "???": [{"ifconfig": "optional_commas"}, "maybe_after_separator"]
 },
 
-
-
-
 "value_or_close": {
+        "???": [{"pushstate": "w_value_or_close"}, "whitespace"]
+},
+
+"w_value_or_close": {
         "}": [{"ifpop": "object"}, "maybe_after_value"],
         "]": [{"ifpop": "array"}, "maybe_after_value"],
         "???": "maybe_after_separator"

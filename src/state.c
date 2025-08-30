@@ -104,7 +104,7 @@ typedef enum {
         state_w_key,
         state_w_after_key,
         state_w_after_value,
-        state_value_or_close,
+        state_w_value_or_close,
         state_null_2,
         state_null_3,
         state_null_4,
@@ -158,7 +158,7 @@ char *states[256] = {
         [state_w_key] = "state_w_key",
         [state_w_after_key] = "state_w_after_key",
         [state_w_after_value] = "state_w_after_value",
-        [state_value_or_close] = "state_value_or_close",
+        [state_w_value_or_close] = "state_w_value_or_close",
         [state_null_2] = "state_null_2",
         [state_null_3] = "state_null_3",
         [state_null_4] = "state_null_4",
@@ -221,8 +221,8 @@ char *states[256] = {
         [0x93] = "w_after_value/'}'",
         [0x94] = "w_after_value/']'",
         [0x95] = "maybe_after_separator/???",
-        [0x96] = "value_or_close/'}'",
-        [0x97] = "value_or_close/']'",
+        [0x96] = "w_value_or_close/'}'",
+        [0x97] = "w_value_or_close/']'",
         [0x98] = "null_4/'l'",
         [0x99] = "true_4/'e'",
         [0x9A] = "false_5/'e'",
@@ -408,12 +408,14 @@ jsonpg_type parse_next(jsonpg_parser p) {
                         L0x8B:
                                 // w_value/'{'
                                 result = begin_object();
-                                new_state = state_value_or_close;
+                                push_state(state_w_value_or_close);
+                                new_state = state_whitespace;
                                 goto Linc;
                         L0x8C:
                                 // w_value/'['
                                 result = begin_array();
-                                new_state = state_value_or_close;
+                                push_state(state_w_value_or_close);
+                                new_state = state_whitespace;
                                 goto Linc;
                         L0x8D:
                                 // [virtual] w_key/???
@@ -474,7 +476,8 @@ jsonpg_type parse_next(jsonpg_parser p) {
                         L0x92:
                                 // w_after_value/','
                                 if(if_config(config_trailing_commas)) {
-                                        new_state = state_value_or_close;
+                                        push_state(state_w_value_or_close);
+                                        new_state = state_whitespace;
                                         goto Linc;
                                 } else {
                                         if(in_object()) {
@@ -570,7 +573,7 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                 new_state = state_whitespace;
                                 goto Lnoinc;
                         L0x96:
-                                // value_or_close/'}'
+                                // w_value_or_close/'}'
                                 if(in_object()) {
                                         result = end_object();
                                         if(in_object()) {
@@ -589,7 +592,7 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                 }
                                 goto Lerror;
                         L0x97:
-                                // value_or_close/']'
+                                // w_value_or_close/']'
                                 if(in_array()) {
                                         result = end_array();
                                         if(in_object()) {

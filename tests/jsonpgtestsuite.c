@@ -283,7 +283,7 @@ void usage(char *progname)
         //         buffer (21 - 28)
         //
         printf("%s [-s <solution number>] <json filename>\n\n", progname);
-        printf("Where solution number (default: 16) is:\n");
+        printf("Where solution number (default: 24) is:\n");
         printf("  N - parse/generate route [Stringified | Prettified : Validated | Not Validated]\n"); 
         printf("  1 - file => dom => stdout                       [S:V]\n");
         printf("  2 - byte buffer => dom => stdout                [S:V]\n");
@@ -312,7 +312,7 @@ void usage(char *progname)
         printf(" 25 - file => buffer => stdout                    [P:N]\n");
         printf(" 26 - byte buffer => buffer => stdout             [P:N]\n");
         printf(" 27 - file => buffer => stdout                    [S:N]\n");
-        printf(" 20 - byte buffer => buffer => stdout             [S:N]\n");
+        printf(" 28 - byte buffer => buffer => stdout             [S:N]\n");
 }
                 
 int main(int argc, char *argv[]) {
@@ -323,7 +323,7 @@ int main(int argc, char *argv[]) {
                         usage(argv[0]);
                         exit(0);
                 } else {
-                        soln = 16;
+                        soln = 24;
                 }
         } else if(4 == argc && 0 == strcmp("-s", argv[1])) {
                 long l = strtol(argv[2], NULL, 10);
