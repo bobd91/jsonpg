@@ -84,91 +84,70 @@ jsonpg_type parse_next(jsonpg_parser p) {
         jsonpg_type result = JSONPG_NONE;
         state new_state;
 
-        while(1) {
-                const uint8_t *last = p->last;
-                while(p->current < last) {
-                        state current_state = state_map[p->state][*p->current];
+        const uint8_t *last = p->last;
+        while(p->current < last) {
+                state current_state = state_map[p->state][*p->current];
 
-                        JSONPG_LOG("State change: %s [%02X:%c] => %s\n", 
-                                        states[p->state],
-                                        *p->current,
-                                        log_printablechar(*p->current),
-                                        states[current_state]);
+                JSONPG_LOG("State change: %s [%02X:%c] => %s\n", 
+                                states[p->state],
+                                *p->current,
+                                log_printablechar(*p->current),
+                                states[current_state]);
 
-                        state jump_state = current_state & 0x7F;
+                state jump_state = current_state & 0x7F;
 
-                        //if(!(current_state & 0x80)) {
-                        if(current_state == jump_state) {
-                                p->state = current_state;
-                                p->current++;
-                                continue;
-                        }
-                        
-                        //state new_state = state_error;
-                        //int incr = 1;
-                        //switch((int)current_state) {
-                        goto *dispatch_table[jump_state];
+                //if(!(current_state & 0x80)) {
+                if(current_state == jump_state) {
+                        p->state = current_state;
+                        p->current++;
+                        continue;
+                }
+                
+                //state new_state = state_error;
+                //int incr = 1;
+                //switch((int)current_state) {
+                goto *dispatch_table[jump_state];
 <= code
 
-                        Linc:
-                                p->current++;
-                        Lnoinc:
-                                if(new_state == state_error)
-                                        goto Lerror;
+                Linc:
+                        p->current++;
+                Lnoinc:
+                        if(new_state == state_error)
+                                goto Lerror;
 
-                                p->state = new_state;
-                                
-                        //
-                        // if(new_state == state_error)
-                        //         return parse_error(p);
-                        //
-                        // JSONPG_LOG("New state: %s, use %s input\n",
-                        //                 states[new_state],
-                        //                 incr ? "next" : "same");
-                        //
-                        // p->state = new_state;
-                        // p->current += incr;
-                        //
-                        // if(result == JSONPG_NONE) {
-                        //         return result;
-                        // }
+                        p->state = new_state;
+                        
+                        if(result == JSONPG_NONE)
+                                continue;
+                        
+                        return result;
 
-                                if(result == JSONPG_NONE)
-                                        continue;
-                                
-                                return result;
-
-                        Lerror:
-                                return parse_error(p);
-                }
-                if(p->seen_eof) {
-
-                        JSONPG_LOG("Exiting... state=%s, push_state=%s token_ptr=%d, stack_ptr=%d\n",
-                                        states[p->state],
-                                        states[p->push_state],
-                                        p->token_ptr,
-                                        p->stack.ptr);
-
-                        // no whitespace after number leaves it dangling
-                        if(p->state == state_zero_integer
-                                        || p->state == state_integer) {
-                                p->push_state = state_error;
-                                p->state = state_whitespace;
-                                return accept_integer(pop_token());
-                        } else if(p->state == state_fraction
-                                        || p->state == state_exponent) {
-                                p->push_state = state_error;
-                                p->state = state_whitespace;
-                                return accept_real(pop_token());
-                        }
-
-                        return (p->push_state == state_error
-                                        && p->token_ptr == 0 
-                                        && p->stack.ptr == p->stack.ptr_min)
-                               ? JSONPG_EOF
-                               : parse_error(p);
-                } else if(-1 == parser_read_next(p)) {
-                        return file_read_error(p);
-                }
+                Lerror:
+                        return parse_error(p);
         }
+
+        JSONPG_LOG("Exiting... state=%s, push_state=%s token_ptr=%d, stack_ptr=%d\n",
+                        states[p->state],
+                        states[p->push_state],
+                        p->token_ptr,
+                        p->stack.ptr);
+
+        // no whitespace after number leaves it dangling
+        if(p->state == state_zero_integer
+                        || p->state == state_integer) {
+                p->push_state = state_error;
+                p->state = state_whitespace;
+                return accept_integer(pop_token());
+        } else if(p->state == state_fraction
+                        || p->state == state_exponent) {
+                p->push_state = state_error;
+                p->state = state_whitespace;
+                return accept_real(pop_token());
+        }
+
+        return (p->push_state == state_error
+                        && p->token_ptr == 0 
+                        && p->stack.ptr == p->stack.ptr_min)
+               ? JSONPG_EOF
+               : parse_error(p);
 }

@@ -1,12 +1,10 @@
 #include <stdio.h>
-#include <fcntl.h>
-#include <unistd.h>
+//#include <fcntl.h>
 #include <math.h>
 
 static char number_buffer[32];
 
 typedef struct print_ctx_s *print_ctx;
-typedef ssize_t (*write_fn)(void *, const void *, size_t);
 
 struct print_ctx_s {
         int level;
@@ -15,14 +13,29 @@ struct print_ctx_s {
         int pretty;
         int nl;
         char *indent;
-        write_fn write;
-        void *write_ctx;
+        str_buf sbuf;
         jsonpg_generator g;
 };
 
 static void set_print_error(print_ctx ctx, jsonpg_error_code code)
 {
         set_generator_error(ctx->g, code);
+}
+
+
+static int write_bytes(print_ctx ctx, uint8_t *bytes, size_t count)
+{
+        return str_buf_append(ctx->sbuf, bytes, count);
+}
+
+static int write_c(print_ctx ctx, char c)
+{
+        return write_bytes(ctx, (uint8_t *)&c, 1);
+}
+
+static int write_s(print_ctx ctx, char *s)
+{
+        return write_bytes(ctx, (uint8_t *)s, strlen(s));
 }
 
 static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count) 
@@ -87,24 +100,14 @@ static int write_utf8(print_ctx ctx, uint8_t *bytes, size_t count)
                 if(print_p) {
                         // We have to print an escape sequence 
                         // first print stuff we skipped
-                        if(ctx->write(ctx->write_ctx, last_s, s - last_s - 1))
+                        if(write_bytes(ctx, last_s, s - last_s - 1))
                                 return -1;
                         last_s = s;
-                        if(ctx->write(ctx->write_ctx, print_p, print_w))
+                        if(write_bytes(ctx, (uint8_t *)print_p, print_w))
                                 return -1;
                 }
         }
-        return ctx->write(ctx->write_ctx, last_s, s - last_s);
-}
-
-static int write_c(print_ctx ctx, char c)
-{
-        return ctx->write(ctx->write_ctx, &c, 1);
-}
-
-static int write_s(print_ctx ctx, char *s)
-{
-        return ctx->write(ctx->write_ctx, s, strlen(s));
+        return write_bytes(ctx, last_s, s - last_s);
 }
 
 static int print_indent(print_ctx ctx)
@@ -296,8 +299,7 @@ static jsonpg_callbacks printer_callbacks = {
 
 static jsonpg_generator print_generator(
                 jsonpg_generator g,
-                write_fn write, 
-                void *write_ctx, 
+                str_buf sbuf,
                 int indent)
 {
         print_ctx ctx = arena_alloc(
@@ -324,8 +326,7 @@ static jsonpg_generator print_generator(
                 ctx->pretty = false;
         }
         ctx->nl = 0;
-        ctx->write = write;
-        ctx->write_ctx = write_ctx;
+        ctx->sbuf = sbuf;
 
         // For reporting generator errors
         ctx->g = g;
@@ -333,32 +334,16 @@ static jsonpg_generator print_generator(
         return g;
 }
 
-static ssize_t write_fd(void *ctx, const void *bytes, size_t count)
-{
-        int fd = CTX_TO_INT(ctx);
-        const uint8_t *start = bytes;
-        size_t size = count;
-        while(size) {
-                size_t w = write(fd, start, size);
-                if(w < 0) {
-                        set_print_error(ctx, JSONPG_ERROR_FILE_WRITE);
-                        return -1;
-                }
-                start += w;
-                size -= w;
-        }
-        return 0;
-}
-
 char *jsonpg_result_string(jsonpg_generator g)
 {
         print_ctx ctx = g->ctx;
-        return str_buf_content_str(ctx->write_ctx);
+        return str_buf_content_str(ctx->sbuf);
 }
 
 size_t jsonpg_result_bytes(jsonpg_generator g, uint8_t **bytes)
 {
-        return str_buf_content(g->ctx, bytes);
+        print_ctx ctx = g->ctx;
+        return str_buf_content(ctx->sbuf, bytes);
 }
 
 static ssize_t write_buffer(void *ctx, const void *bytes, size_t count)
@@ -367,23 +352,11 @@ static ssize_t write_buffer(void *ctx, const void *bytes, size_t count)
         return str_buf_append(sbuf, bytes, count);
 }
 
-static jsonpg_generator file_printer(jsonpg_generator g, int fd, int indent)
-{
-        return print_generator(g, write_fd, INT_TO_CTX(fd), indent);
-}
-
 static jsonpg_generator buffer_printer(jsonpg_generator g, int indent)
 {
         str_buf sbuf = str_buf_new(g->arena, 0);
         if(!sbuf)
                 return NULL;
 
-        return print_generator(g, write_buffer, sbuf, indent);
+        return print_generator(g, sbuf, indent);
 }
-
-static jsonpg_generator write_printer(jsonpg_generator g, jsonpg_writer writer, int indent)
-{
-        return print_generator(g, writer->write, writer->ctx, indent);
-
-}
-

@@ -212,84 +212,6 @@ static int process_escape_u(jsonpg_parser p, token t)
         return 0;
 }
 
-static int input_read(jsonpg_parser p, uint8_t *start)
-{
-       uint8_t *pos = start;
-       int max = p->input_size - (start - p->input);
-       while(max) {
-               int l = p->read_fn(p->read_ctx, pos, max);
-               if(l < 0)
-                       return -1;
-               if(l == 0)
-                       break;
-               pos += l;
-               max -= l;
-       }
-       p->last = pos;
-       p->current = start;
-       
-       return max == 0;
-}
-
-static int parser_read_next(jsonpg_parser p)
-{
-        p->processed += p->current - p->input;
-        uint8_t *start = p->input;
-        if(p->token_ptr > 0) {
-                // We have a token on the stack
-                // Perform any special processing required
-                // to survive the crossing of input buffer boundaries
-                token t = &p->tokens[p->token_ptr - 1];
-                int tinfo = token_type_info[t->type];
-                if(tinfo & TOKEN_INFO_COPY_FORWARD) {
-                        // copy bytes from current input needed
-                        // for parsing next input
-                        uint8_t *tpos;
-                        if(tinfo & TOKEN_INFO_IS_SURROGATE) {
-                                // sub-token of escape_u
-                                // and we need to copy entire escape sequence
-                                assert(p->token_ptr > 1 
-                                                && "Surrogate token without parent");
-
-                                token escu_t = &p->tokens[p->token_ptr -2];
-                                tpos = escu_t->pos;
-
-                                // Have to adjust start of both the current token
-                                // and the enclosing escape_u token
-                                int diff = t->pos - escu_t->pos;
-                                escu_t->pos = p->input;
-                                t->pos = escu_t->pos + diff;
-                        } else {
-                                tpos = t->pos;
-                                t->pos = p->input;
-                        }
-                        while(tpos < p->last)
-                                *start++ = *tpos++;
-
-                } else if(tinfo & TOKEN_INFO_IS_STRING) {
-                        // write string bytes as we are still in a string
-                        if(write_b(t->pos, p->last - t->pos))
-                                return -1;
-                        // And adjust token to start of string continuation
-                        t->pos = p->input;
-
-                } else {
-                        t->pos = p->input;
-                }
-        }
-        int l = input_read(p, start);
-
-        if(l >= 0)
-                p->seen_eof = (l == 0);
-
-        return l;
-}
-
-static ssize_t read_fd(void *ctx, void *buf, size_t count)
-{
-        return read(CTX_TO_INT(ctx), buf, count);
-}
-
 void jsonpg_parser_free(jsonpg_parser p) 
 {
         if(!p)
@@ -332,45 +254,15 @@ static void parser_set_bytes(
                 uint8_t *bytes, 
                 size_t count)
 {
-        p->processed = 0;
         p->input = p->current = bytes;
         p->input_size = count;
         p->last = bytes + count;
-        p->seen_eof = 1;
         p->stack.ptr = p->stack.ptr_min;
         p->token_ptr = 0;
         p->state = STATE_INITIAL;
 
         // Skip leading byte order mark
         p->current += utf8_bom_bytes(p->input, p->input_size);
-}
-
-static jsonpg_type parser_set_reader(
-                jsonpg_parser p, 
-                ssize_t (*read_fn)(void *, void *, size_t),
-                void *ctx)
-{
-        p->processed = 0;
-        p->input = p->current = arena_alloc(p->arena, BUF_SIZE);
-        if(!p->input)
-                return alloc_error(p);
-        p->input_size = BUF_SIZE;
-
-        p->read_fn = read_fn;
-        p->read_ctx = ctx;
-
-        int l = input_read(p, p->input);
-        if(l < 0)
-                return file_read_error(p);
-        p->seen_eof = (0 == l);
-        p->stack.ptr = p->stack.ptr_min;
-        p->token_ptr = 0;
-        p->state = STATE_INITIAL;
-
-        // Skip leading byte order mark
-        p->current += utf8_bom_bytes(p->input, p->input_size);
-
-        return JSONPG_NONE;
 }
 
 void parser_set_dom_info(jsonpg_parser p, dom_info di)
@@ -382,10 +274,7 @@ jsonpg_parser parser_reset(jsonpg_parser p)
 {
         p->write_buf = str_buf_reset(p->write_buf);
         
-        p->processed = 0;
         p->input = NULL;
-        p->read_fn = NULL;
-        p->read_ctx = NULL;
 
         p->dom_info = (dom_info){};
 
@@ -407,26 +296,12 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
                         return make_error_return(JSONPG_ERROR_ALLOC, 0);
         }
 
-        int input_opt_count = 
-                          (opts.fd > 0)
-                        + (opts.bytes != NULL)
-                        + (opts.string != NULL)
-                        + (opts.reader != NULL)
-                        + (opts.dom != NULL);
-
-        if(1 < input_opt_count) {
+        if(1 != (opts.bytes != NULL) + (opts.string != NULL) + (opts.dom != NULL)) {
                 alloc_error(p);
                 return p->result;
         }
 
-        if(opts.fd > 0 || input_opt_count == 0) {
-                int fd = opts.fd > 0 ? opts.fd : 0;
-                if(parser_set_reader(p, read_fd, INT_TO_CTX(fd)))
-                        return p->result;
-        } else if(opts.reader) {
-                if(parser_set_reader(p, opts.reader->read, opts.reader->ctx))
-                        return p->result;
-        } else if(opts.bytes) {
+        if(opts.bytes) {
                  parser_set_bytes(p, opts.bytes, opts.count);
         } else if(opts.string) {
                  parser_set_bytes(p, (uint8_t *)opts.string, strlen(opts.string));
@@ -491,9 +366,6 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
                 }
 
                 p->input = NULL;
-
-                p->read_fn = NULL;
-                p->read_ctx = NULL;
 
                 p->stack.size = stack_size;
                 p->stack.stack = (uint8_t *)(((void *)p) + struct_bytes);

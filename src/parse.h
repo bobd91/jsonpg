@@ -9,9 +9,6 @@
 
 #define STACK_SIZE 1024
 
-#define CTX_TO_INT(X) ((int)(int64_t)X)
-#define INT_TO_CTX(X)   ((void *)(int64_t)X)
-
 typedef enum {
         token_null,
         token_true,
@@ -36,12 +33,10 @@ typedef struct token_s {
 } *token;
 
 typedef struct str_buf_s *str_buf;
-typedef struct jsonpg_reader_s reader;
 typedef struct dom_info_s dom_info;
 
 struct jsonpg_parser_s {
         arena arena;
-        uint8_t seen_eof;
         uint8_t token_ptr;
         uint8_t state;
         uint8_t push_state;
@@ -50,10 +45,7 @@ struct jsonpg_parser_s {
         uint8_t *input;   
         uint8_t *current;
         uint8_t *last;
-        size_t processed;
         str_buf write_buf;
-        ssize_t (*read_fn)(void *, void *, size_t);
-        void *read_ctx;
         dom_info dom_info;
         jsonpg_value result;
         struct token_s tokens[TOKEN_MAX];

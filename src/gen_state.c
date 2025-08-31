@@ -22,7 +22,7 @@ typedef struct gen_action_list_s *gen_action_list;
 typedef struct gen_renderer_s *gen_renderer;
 
 #define MAX_CHARS_IN_CLASS 22
-#define CODE_START_LEVEL 3
+#define CODE_START_LEVEL 2
 
 struct gen_state_s {
         gen_class_list classes;
@@ -41,6 +41,7 @@ struct gen_rule_s {
 };
 
 typedef enum {
+        MATCH_NOT_SET,
         MATCH_CLASS_NAME,
         MATCH_CLASS,
         MATCH_CHAR,
@@ -418,6 +419,7 @@ gen_action_list parse_action_list(jsonpg_parser p)
                 if(!head)
                         head = current;
                 current->action = act;
+                current->next = NULL;
                 if(prev)
                         prev->next = current;
                 prev = current;
@@ -490,6 +492,7 @@ gen_match_list parse_match_list(jsonpg_parser p) {
                 if(!head)
                         head = current;
                 current->match = m;
+                current->next = NULL;
                 if(prev)
                         prev->next = current;
                 prev = current;
@@ -502,7 +505,10 @@ gen_match_list parse_match_list(jsonpg_parser p) {
 
 gen_state create_states()
 {
-        return malloc(sizeof(struct gen_state_s));
+        gen_state states = malloc(sizeof(struct gen_state_s));
+        states->classes = NULL;
+        states->rules = NULL;
+        return states;
 }
 
 void parse_class_chars(gen_class c, jsonpg_parser p)
@@ -1359,12 +1365,12 @@ void render_rule(
         render_map_values(r, rule_states, map, first);
 }
 
-gen_renderer renderer_new(int level)
+gen_renderer renderer_new(arena a, int level)
 {
-        gen_renderer r = fmalloc(sizeof(struct gen_renderer_s));
+        gen_renderer r = arena_alloc(a, sizeof(struct gen_renderer_s));
         r->level = level;
         r->startlevel = level;
-        r->sbuf = str_buf_new(0);
+        r->sbuf = str_buf_new(a, 0);
         return r;
 }
 
@@ -1390,15 +1396,15 @@ void merge_renderer(FILE *in, FILE *out, gen_renderer r, char *tag)
         write_renderer(out, r);
 }
 
-void render_state(gen_state states)
+void render_state(arena a, gen_state states)
 {
         gen_rule_list rl = states->rules;
-        gen_renderer map = renderer_new(1);
-        gen_renderer enums = renderer_new(1);
-        gen_renderer enum_names = renderer_new(1);
-        gen_renderer cases = renderer_new(1);
-        gen_renderer gotos = renderer_new(CODE_START_LEVEL);
-        gen_renderer code = renderer_new(CODE_START_LEVEL);
+        gen_renderer map = renderer_new(a, 1);
+        gen_renderer enums = renderer_new(a, 1);
+        gen_renderer enum_names = renderer_new(a, 1);
+        gen_renderer cases = renderer_new(a, 1);
+        gen_renderer gotos = renderer_new(a, CODE_START_LEVEL);
+        gen_renderer code = renderer_new(a, CODE_START_LEVEL);
 
         int first = 1;
         while(rl) {
@@ -1440,14 +1446,23 @@ int main(int argc, char *argv[])
 
         int dump = (argc == 3);
 
-        FILE *stream = fopen(argv[argc - 1], "rb");
-        if(!stream) {
+        FILE *fh = fopen(argv[argc - 1], "rb");
+        if(!fh) {
                 perror("Failed to open input");
                 exit(1);
         }
+        fseek(fh, 0L, SEEK_END);
+        long length = ftell(fh);
+        rewind(fh);
+        uint8_t *buf = malloc(length + 1);
+        if(!buf)
+                fail("Failed to allocate memory to read file content");
+
+        fread(buf, length, 1, fh);
+        fclose(fh);
 
         jsonpg_parser p = jsonpg_parser_new();
-        jsonpg_value val = jsonpg_parse(.parser = p, .fd = fileno(stream));
+        jsonpg_value val = jsonpg_parse(.parser = p, .bytes = buf, .count = length);
         jsonpg_type type = val.type;
         if(type != JSONPG_EOF && type != JSONPG_ERROR) {
                 type = jsonpg_parse_next(p);
@@ -1457,7 +1472,7 @@ int main(int argc, char *argv[])
                                 if(dump) {
                                         dump_state(s);
                                 } else {
-                                        render_state(s);
+                                        render_state(p->arena, s);
                                 }
                         } else {
                                 printf("Invalid states\n");
@@ -1468,11 +1483,13 @@ int main(int argc, char *argv[])
                 }
                 type = jsonpg_parse_next(p);
         }
+
         if(type != JSONPG_EOF) {
+                val = jsonpg_parse_result(p);
                 if(type == JSONPG_ERROR) 
                         printf("Error %d at %ld\n", 
-                                        jsonpg_parse_result(p).error.code, 
-                                        jsonpg_parse_result(p).error.at);
+                                        val.error.code, 
+                                        val.error.at);
                 else
                         printf("Expecting EOF, got: %d\n", type);
                 exit(1);

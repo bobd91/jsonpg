@@ -107,7 +107,7 @@ int test_end_array(void *ctx)
 #include "../src/jsonpg_undef_macros.h"
 
 void *ctx_generator(void) {
-        return jsonpg_generator_new(.fd = fileno(stdout), .max_nesting = 0);
+        return jsonpg_generator_new(.max_nesting = 0);
 }
 
 jsonpg_callbacks test_callbacks = {
@@ -132,132 +132,88 @@ void fail(char *msg)
 jsonpg_value parse_solution(int soln, FILE *fh)
 {
         // Input - 
-        //      fd
         //      buffer
         //      dom (covered by dom output tests below)
         //
         // Output (not JSON, with/without validation) -
-        //      dom (1 - 4)
-        //      callback (specified in parse) (5 - 8)
-        //      callback (generator) (9 - 12)
+        //      dom (1 - 2)
+        //      callback (specified in parse) (3 - 4)
+        //      callback (generator) (5 - 6)
         //
         // Output (pretty/not pretty, with/without validation) -
-        //         fd (13 - 20)
-        //         buffer (21 - 28)
+        //         buffer (7 - 10)
         //
         bool create_dom = false;
         bool parse_callback = false;
-        bool buffered = false;
-        int in_fd = fileno(fh);
         jsonpg_generator g = NULL;
         jsonpg_generator ctx_g = NULL;
 
-        if(soln < 3) {
+        if(soln == 1) {
                 create_dom = true;
                 g = jsonpg_generator_new(.dom = true);
-        } else if(soln < 5) {
+        } else if(soln == 2) {
                 create_dom = true;
                 g = jsonpg_generator_new(.dom = true, .max_nesting = 0);
-        } else if (soln < 7) {
+        } else if (soln < 5) {
                 parse_callback = true;
-        } else if (soln < 11) {
+        } else if (soln == 5) {
                 ctx_g = ctx_generator();
                 g = jsonpg_generator_new(
                                 .callbacks = &test_callbacks,
                                 .ctx = ctx_g);
-        } else if (soln < 13) {
+        } else if (soln == 6) {
                 ctx_g = ctx_generator();
                 g = jsonpg_generator_new(
                                 .callbacks = &test_callbacks,
                                 .ctx = ctx_g,
                                 .max_nesting = 0);
-        } else if (soln < 15) {
+        } else if (soln == 7) {
                 g = jsonpg_generator_new(
-                                .fd = fileno(stdout),
                                 .indent = 4);
-        } else if(soln < 17) {
-                g = jsonpg_generator_new(.fd = fileno(stdout));
-        } else if(soln < 19) {
+        } else if(soln == 8) {
+                g = jsonpg_generator_new();
+        } else if(soln == 9) {
                 g = jsonpg_generator_new(
-                                .fd = fileno(stdout),
-                                .indent = 4,
-                                .max_nesting = 0);
-        } else if(soln < 21) {
-                g = jsonpg_generator_new(
-                                .fd = fileno(stdout),
-                                .max_nesting = 0);
-        } else if (soln < 23) {
-                buffered = true;
-                g = jsonpg_generator_new(
-                                .buffer = true,
-                                .indent = 4);
-        } else if(soln < 25) {
-                buffered = true;
-                g = jsonpg_generator_new(.buffer = true);
-        } else if(soln < 27) {
-                buffered = true;
-                g = jsonpg_generator_new(
-                                .buffer = true,
                                 .indent = 4,
                                 .max_nesting = 0);
         } else {
-                buffered = true;
                 g = jsonpg_generator_new(
-                                .buffer = true,
                                 .max_nesting = 0);
         }
 
-        int parse_type = soln % 2;
         jsonpg_value res;
 
-        if(1 == parse_type) {
-                if(create_dom) {
-                        res = jsonpg_parse(.fd = in_fd, .generator = g);
-                        if(res.type == JSONPG_EOF) {
-                                ctx_g = ctx_generator();
-                                res = jsonpg_parse(
-                                                .dom = jsonpg_result_dom(g),
-                                                .generator = ctx_g);
-                        }
-                } else if(parse_callback) {
-                        ctx_g = ctx_generator();
-                        res = jsonpg_parse(.fd = in_fd,
-                                        .callbacks = &test_callbacks,
-                                        .ctx = ctx_g);
-                } else {
-                        res = jsonpg_parse(.fd = in_fd, .generator = g);
+        fseek(fh, 0L, SEEK_END);
+        long length = ftell(fh);
+        rewind(fh);
+        uint8_t *buf = malloc(length + 1);
+        if(!buf)
+                fail("Failed to allocate memory to read file content");
+
+        fread(buf, length, 1, fh);
+
+        if(create_dom) {
+                res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
+                ctx_g = ctx_generator();
+                if(res.type == JSONPG_EOF) {
+                        res = jsonpg_parse(
+                                        .dom = jsonpg_result_dom(g),
+                                        .generator = ctx_g);
                 }
+        } else if(parse_callback) {
+                ctx_g = ctx_generator();
+                res = jsonpg_parse(.bytes = buf, .count = length,
+                                .callbacks = &test_callbacks,
+                                .ctx = ctx_g);
         } else {
-                fseek(fh, 0L, SEEK_END);
-                long length = ftell(fh);
-                rewind(fh);
-                uint8_t *buf = malloc(length + 1);
-                if(!buf)
-                        fail("Failed to allocate memory to read file content");
-
-                fread(buf, length, 1, fh);
-
-                if(create_dom) {
-                        res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
-                        ctx_g = ctx_generator();
-                        if(res.type == JSONPG_EOF) {
-                                res = jsonpg_parse(
-                                                .dom = jsonpg_result_dom(g),
-                                                .generator = ctx_g);
-                        }
-                } else if(parse_callback) {
-                        ctx_g = ctx_generator();
-                        res = jsonpg_parse(.bytes = buf, .count = length,
-                                        .callbacks = &test_callbacks,
-                                        .ctx = ctx_g);
-                } else {
-                        res = jsonpg_parse(.bytes = buf, 
-                                        .count = length, 
-                                        .generator = g);
-                }
-                free(buf);
+                res = jsonpg_parse(.bytes = buf, 
+                                .count = length, 
+                                .generator = g);
         }
-        if(buffered)
+        free(buf);
+        if(ctx_g)
+                printf("%s", jsonpg_result_string(ctx_g));
+        else
                 printf("%s", jsonpg_result_string(g));
 
         jsonpg_generator_free(g);
@@ -268,51 +224,19 @@ jsonpg_value parse_solution(int soln, FILE *fh)
 
 void usage(char *progname)
 {       
-        // Input - 
-        //      fd
-        //      buffer
-        //      dom (covered by dom output tests below)
-        //
-        // Output (not JSON, with/without validation) -
-        //      dom (1 - 4)
-        //      callback (specified in parse) (5 - 8)
-        //      callback (generator) (9 - 12)
-        //
-        // Output (pretty/not pretty, with/without validation) -
-        //         fd (13 - 20)
-        //         buffer (21 - 28)
-        //
         printf("%s [-s <solution number>] <json filename>\n\n", progname);
-        printf("Where solution number (default: 24) is:\n");
+        printf("Where solution number (default: 8) is:\n");
         printf("  N - parse/generate route [Stringified | Prettified : Validated | Not Validated]\n"); 
-        printf("  1 - file => dom => stdout                       [S:V]\n");
-        printf("  2 - byte buffer => dom => stdout                [S:V]\n");
-        printf("  3 - file => dom => stdout                       [S:N]\n");
-        printf("  4 - byte buffer => dom => stdout                [S:N]\n");
-        printf("  5 - file => parse/callback => stdout            [S:V]\n");
-        printf("  6 - byte buffer => parse/callback => stdout     [S:V]\n");
-        printf("  7 - file => parse/callback => stdout            [S:N]\n");
-        printf("  8 - byte buffer => parse/callback => stdout     [S:N]\n");
-        printf("  9 - file => generator/callback => stdout        [S:V]\n");
-        printf(" 10 - byte buffer => generator/callback => stdout [S:V]\n");
-        printf(" 11 - file => generator/callback => stdout        [S:N]\n");
-        printf(" 12 - byte buffer => generator/callback => stdout [S:N]\n");
-        printf(" 13 - file => stdout                              [P:V]\n");
-        printf(" 14 - byte buffer => stdout                       [P:V]\n");
-        printf(" 15 - file => stdout                              [S:V]\n");
-        printf(" 16 - byte buffer => stdout                       [S:V]\n");
-        printf(" 17 - file => stdout                              [P:N]\n");
-        printf(" 18 - byte buffer => stdout                       [P:N]\n");
-        printf(" 19 - file => stdout                              [S:N]\n");
-        printf(" 20 - byte buffer => stdout                       [S:N]\n");
-        printf(" 21 - file => buffer => stdout                    [P:V]\n");
-        printf(" 22 - byte buffer => buffer => stdout             [P:V]\n");
-        printf(" 23 - file => buffer => stdout                    [S:V]\n");
-        printf(" 24 - byte buffer => buffer => stdout             [S:V]\n");
-        printf(" 25 - file => buffer => stdout                    [P:N]\n");
-        printf(" 26 - byte buffer => buffer => stdout             [P:N]\n");
-        printf(" 27 - file => buffer => stdout                    [S:N]\n");
-        printf(" 28 - byte buffer => buffer => stdout             [S:N]\n");
+        printf("  1 - byte buffer => dom => stdout                [S:V]\n");
+        printf("  2 - byte buffer => dom => stdout                [S:N]\n");
+        printf("  3 - byte buffer => parse/callback => stdout     [S:V]\n");
+        printf("  4 - byte buffer => parse/callback => stdout     [S:N]\n");
+        printf("  5 - byte buffer => generator/callback => stdout [S:V]\n");
+        printf("  6 - byte buffer => generator/callback => stdout [S:N]\n");
+        printf("  7 - byte buffer => buffer => stdout             [P:V]\n");
+        printf("  8 - byte buffer => buffer => stdout             [S:V]\n");
+        printf("  9 - byte buffer => buffer => stdout             [P:N]\n");
+        printf(" 10 - byte buffer => buffer => stdout             [S:N]\n");
 }
                 
 int main(int argc, char *argv[]) {
@@ -323,11 +247,11 @@ int main(int argc, char *argv[]) {
                         usage(argv[0]);
                         exit(0);
                 } else {
-                        soln = 24;
+                        soln = 8;
                 }
         } else if(4 == argc && 0 == strcmp("-s", argv[1])) {
                 long l = strtol(argv[2], NULL, 10);
-                if(l > 0 && l < 29)
+                if(l > 0 && l < 11)
                         soln = l;
         }
 

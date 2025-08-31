@@ -227,11 +227,7 @@ void jsonpg_generator_free(jsonpg_generator g)
 
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
 {
-        if(1 != (opts.fd > 0) 
-                        + (opts.buffer == true)
-                        + (opts.dom == true)
-                        + (opts.writer != NULL)
-                        + (opts.callbacks != NULL))
+        if(1 < (opts.dom == true) + (opts.callbacks != NULL))
                 return NULL;
         
         int indent = opts.indent;
@@ -244,15 +240,12 @@ jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts opts)
         if(!g)
                 return NULL;
 
-        if(opts.fd > 0)
-                return file_printer(g, opts.fd, indent);
-        else if(opts.buffer)
-                return buffer_printer(g, indent);
-        else if(opts.writer)
-                return write_printer(g, opts.writer, indent);
         else if(opts.dom)
                 return dom_generator(g);
-        else
+        else if(opts.callbacks)
                 return generator_set_callbacks(g, opts.callbacks, opts.ctx);
+        else
+                return buffer_printer(g, indent);
+                
 
 }

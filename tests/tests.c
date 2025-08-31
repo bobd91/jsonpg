@@ -32,25 +32,17 @@ int main(int argc, char *argv[])
 {
         jsonpg_generator g;
         jsonpg_value res;
-        if(argc == 2) {
-                int fd = open(argv[1], O_RDONLY, "rb");
-                if(fd == -1) {
-                        perror("Failed to open file");
-                        exit(1);
-                }
-
-                g = jsonpg_generator_new(.fd = fileno(stdout), .indent = 2);
-                res = jsonpg_parse(.fd = fd, .generator = g);
-                jsonpg_generator_free(g);
-        } else if(argc == 3) {
+        if(argc == 3) {
                 if(0 == strcmp("-e", argv[1])) {
                         puts(argv[2]);
                         uint8_t buf[1024];
                         char *json = argv[2];
                         size_t len = strlen(json);
                         memcpy(buf, json, len + 1);
-                        g = jsonpg_generator_new(.fd = fileno(stdout), .indent = 2);
+                        g = jsonpg_generator_new(.indent = 2);
                         res = jsonpg_parse(.bytes = buf, .count = len, .generator = g);
+                        char *s = jsonpg_result_string(g);
+                        printf(s);
                         jsonpg_generator_free(g);
                         if(JSONPG_ERROR == res.type) {
                                 printf("Parse res: %d\n", res.type);
@@ -75,7 +67,7 @@ int main(int argc, char *argv[])
                                         fread(buf, length, 1, fh);
                                         res = (jsonpg_value){};
                                         for(int i = 0 ; i < times ; i++) {
-                                                jsonpg_generator g = jsonpg_generator_new(.buffer = true, .max_nesting = 0);
+                                                jsonpg_generator g = jsonpg_generator_new(.max_nesting = 0);
                                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                                 if(res.type == JSONPG_ERROR) {
                                                         perror("Parse 2 failed");

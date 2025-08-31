@@ -25,9 +25,9 @@ fi
 
 for infile in ${input_dir}/*.json; do
         file=$(basename $infile)
-        for s in {1..28}; do
+        for s in {1..10}; do
                 outdir=$passed_dir
-                for p in 13 14 17 18 21 22 25 26; do
+                for p in 7 9; do
                         if [ $s -eq $p ]; then
                                 outdir=$pretty_dir
                                 break

@@ -112,15 +112,6 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts);
 // jsonpg_parser_new(.flags = JSONPG_FLAG_COMMENTS 
 //                              | JSONPG_FLAG_TRAILING_COMMAS);
 
-
-// Read JSON from somewhere custom
-typedef struct jsonpg_reader_s *jsonpg_reader;
-struct jsonpg_reader_s {
-        // Like standard read function except first argument is supplied ctx
-        ssize_t (*read)(void *, void *, size_t);
-        void *ctx;
-};
-
 typedef struct {
         // Optional parser, required for pull parsing
         jsonpg_parser parser;
@@ -132,16 +123,13 @@ typedef struct {
         uint16_t flags;      
 
         // Input options, specify one type only
-        // If none are supplied then fd = 0 (stdin) is used
         //
         // All input is JSON bytes except for the 'dom' option
         // which is an in-memeory representation of parsed JSON
         // created by jsonpg_generator_new(.dom = true, ...)
-        int fd;                 // file descriptor
         uint8_t *bytes;         // input bytes, must set count
         size_t count;
         char *string;           // NULL terminated C string
-        jsonpg_reader reader;
         jsonpg_dom dom;
 
         // Optional callbacks and callback ctx for SAX style parsing
@@ -195,27 +183,19 @@ jsonpg_value jsonpg_parse_result(jsonpg_parser);
 // jsonpg_parser_free(p);
 //
 
-
-// Write generated JSON to a custom location
-typedef struct jsonpg_writer_s *jsonpg_writer;
-struct jsonpg_writer_s {
-        // Like standard write function except first argument is supplied ctx
-        ssize_t (*write)(void *, const void *, size_t);
-        void *ctx;
-};
-
 typedef struct {
         // Pretty printing is ignored when writing to DOM or callbacks
         int indent;             // pretty printing indent, 0 = stringify
         
-        // Output options, specify one type
-        // Options 'buffer' and 'dom' collect the generated results
-        // These results are available from jsonpg_result_string,
-        // jsonpg_result_bytes or jsonpg_result_dom (see below)
-        bool buffer;
+        // Output options, specify max one type
+        // If none are specified then the output will be buffered
+        // and results will be available via jsonpg_result_string
+        // or jsonpg_result_bytes
+        // Options 'dom' build an in-memory representation of the parse
+        // results which is available via jsonpg_result_dom
+        // [Not much can be done with dom at the moment apart from
+        //  providing it as an input to parse]
         bool dom;
-        int fd;
-        jsonpg_writer writer;
         jsonpg_callbacks *callbacks;
         void *ctx;
 

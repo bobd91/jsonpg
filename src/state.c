@@ -253,55 +253,55 @@ char *states[256] = {
 
 jsonpg_type parse_next(jsonpg_parser p) {
         static void* dispatch_table[0x80] = {
-                        &&L0x80,
-                        &&L0x81,
-                        &&L0x82,
-                        &&L0x83,
-                        &&L0x84,
-                        &&L0x85,
-                        &&L0x86,
-                        &&L0x87,
-                        &&L0x88,
-                        &&L0x89,
-                        &&L0x8A,
-                        &&L0x8B,
-                        &&L0x8C,
-                        &&L0x8D,
-                        &&L0x8E,
-                        &&L0x8F,
-                        &&L0x90,
-                        &&L0x91,
-                        &&L0x92,
-                        &&L0x93,
-                        &&L0x94,
-                        &&L0x95,
-                        &&L0x96,
-                        &&L0x97,
-                        &&L0x98,
-                        &&L0x99,
-                        &&L0x9A,
-                        &&L0x9B,
-                        &&L0x9C,
-                        &&L0x9D,
-                        &&L0x9E,
-                        &&L0x9F,
-                        &&L0xA0,
-                        &&L0xA1,
-                        &&L0xA2,
-                        &&L0xA3,
-                        &&L0xA4,
-                        &&L0xA5,
-                        &&L0xA6,
-                        &&L0xA7,
-                        &&L0xA8,
-                        &&L0xA9,
-                        &&L0xAA,
-                        &&L0xAB,
-                        &&L0xAC,
-                        &&L0xAD,
-                        &&L0xAE,
-                        &&L0xAF,
-                        &&L0xB0,
+                &&L0x80,
+                &&L0x81,
+                &&L0x82,
+                &&L0x83,
+                &&L0x84,
+                &&L0x85,
+                &&L0x86,
+                &&L0x87,
+                &&L0x88,
+                &&L0x89,
+                &&L0x8A,
+                &&L0x8B,
+                &&L0x8C,
+                &&L0x8D,
+                &&L0x8E,
+                &&L0x8F,
+                &&L0x90,
+                &&L0x91,
+                &&L0x92,
+                &&L0x93,
+                &&L0x94,
+                &&L0x95,
+                &&L0x96,
+                &&L0x97,
+                &&L0x98,
+                &&L0x99,
+                &&L0x9A,
+                &&L0x9B,
+                &&L0x9C,
+                &&L0x9D,
+                &&L0x9E,
+                &&L0x9F,
+                &&L0xA0,
+                &&L0xA1,
+                &&L0xA2,
+                &&L0xA3,
+                &&L0xA4,
+                &&L0xA5,
+                &&L0xA6,
+                &&L0xA7,
+                &&L0xA8,
+                &&L0xA9,
+                &&L0xAA,
+                &&L0xAB,
+                &&L0xAC,
+                &&L0xAD,
+                &&L0xAE,
+                &&L0xAF,
+                &&L0xB0,
                 [0x7F] = &&Lerror      
         };
 
@@ -316,237 +316,135 @@ jsonpg_type parse_next(jsonpg_parser p) {
         jsonpg_type result = JSONPG_NONE;
         state new_state;
 
-        while(1) {
-                const uint8_t *last = p->last;
-                while(p->current < last) {
-                        state current_state = state_map[p->state][*p->current];
+        const uint8_t *last = p->last;
+        while(p->current < last) {
+                state current_state = state_map[p->state][*p->current];
 
-                        JSONPG_LOG("State change: %s [%02X:%c] => %s\n", 
-                                        states[p->state],
-                                        *p->current,
-                                        log_printablechar(*p->current),
-                                        states[current_state]);
+                JSONPG_LOG("State change: %s [%02X:%c] => %s\n", 
+                                states[p->state],
+                                *p->current,
+                                log_printablechar(*p->current),
+                                states[current_state]);
 
-                        state jump_state = current_state & 0x7F;
+                state jump_state = current_state & 0x7F;
 
-                        //if(!(current_state & 0x80)) {
-                        if(current_state == jump_state) {
-                                p->state = current_state;
-                                p->current++;
-                                continue;
-                        }
-                        
-                        //state new_state = state_error;
-                        //int incr = 1;
-                        //switch((int)current_state) {
-                        goto *dispatch_table[jump_state];
-                        L0x80:
-                                // [virtual] whitespace/???
+                //if(!(current_state & 0x80)) {
+                if(current_state == jump_state) {
+                        p->state = current_state;
+                        p->current++;
+                        continue;
+                }
+                
+                //state new_state = state_error;
+                //int incr = 1;
+                //switch((int)current_state) {
+                goto *dispatch_table[jump_state];
+                L0x80:
+                        // [virtual] whitespace/???
+                        new_state = pop_state();
+                        goto Lnoinc;
+                L0x81:
+                        // whitespace/'/'
+                        if(if_config(config_comments)) {
+                                new_state = state_comment_leader;
+                                goto Linc;
+                        } else {
                                 new_state = pop_state();
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0x82:
+                        // [virtual] w_value/???
+                        if(if_config(config_unquoted_strings)) {
+                                push_token(token_nq_string);
+                                new_state = state_nq_string;
                                 goto Lnoinc;
-                        L0x81:
-                                // whitespace/'/'
-                                if(if_config(config_comments)) {
-                                        new_state = state_comment_leader;
-                                        goto Linc;
-                                } else {
-                                        new_state = pop_state();
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x82:
-                                // [virtual] w_value/???
-                                if(if_config(config_unquoted_strings)) {
-                                        push_token(token_nq_string);
-                                        new_state = state_nq_string;
-                                        goto Lnoinc;
-                                }
-                                goto Lerror;
-                        L0x83:
-                                // w_value/'n'
-                                push_token(token_null);
-                                new_state = state_null_2;
+                        }
+                        goto Lerror;
+                L0x83:
+                        // w_value/'n'
+                        push_token(token_null);
+                        new_state = state_null_2;
+                        goto Linc;
+                L0x84:
+                        // w_value/'t'
+                        push_token(token_true);
+                        new_state = state_true_2;
+                        goto Linc;
+                L0x85:
+                        // w_value/'f'
+                        push_token(token_false);
+                        new_state = state_false_2;
+                        goto Linc;
+                L0x86:
+                        // w_value/'-'
+                        push_token(token_integer);
+                        new_state = state_minus;
+                        goto Linc;
+                L0x87:
+                        // w_value/'0'
+                        push_token(token_integer);
+                        new_state = state_zero_integer;
+                        goto Linc;
+                L0x88:
+                        // w_value/$1-9
+                        push_token(token_integer);
+                        new_state = state_integer;
+                        goto Linc;
+                L0x89:
+                        // w_value/'"'
+                        push_token(token_string);
+                        new_state = state_string;
+                        goto Linc;
+                L0x8A:
+                        // w_value/'''
+                        if(if_config(config_single_quotes)) {
+                                push_token(token_sq_string);
+                                new_state = state_sq_string;
                                 goto Linc;
-                        L0x84:
-                                // w_value/'t'
-                                push_token(token_true);
-                                new_state = state_true_2;
+                        }
+                        goto Lerror;
+                L0x8B:
+                        // w_value/'{'
+                        result = begin_object();
+                        push_state(state_w_value_or_close);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x8C:
+                        // w_value/'['
+                        result = begin_array();
+                        push_state(state_w_value_or_close);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x8D:
+                        // [virtual] w_key/???
+                        if(if_config(config_unquoted_keys)) {
+                                push_token(token_nq_key);
+                                new_state = state_nq_string;
+                                goto Lnoinc;
+                        }
+                        goto Lerror;
+                L0x8E:
+                        // w_key/'"'
+                        push_token(token_key);
+                        new_state = state_string;
+                        goto Linc;
+                L0x8F:
+                        // w_key/'''
+                        if(if_config(config_single_quotes)) {
+                                push_token(token_sq_key);
+                                new_state = state_sq_string;
                                 goto Linc;
-                        L0x85:
-                                // w_value/'f'
-                                push_token(token_false);
-                                new_state = state_false_2;
-                                goto Linc;
-                        L0x86:
-                                // w_value/'-'
-                                push_token(token_integer);
-                                new_state = state_minus;
-                                goto Linc;
-                        L0x87:
-                                // w_value/'0'
-                                push_token(token_integer);
-                                new_state = state_zero_integer;
-                                goto Linc;
-                        L0x88:
-                                // w_value/$1-9
-                                push_token(token_integer);
-                                new_state = state_integer;
-                                goto Linc;
-                        L0x89:
-                                // w_value/'"'
-                                push_token(token_string);
-                                new_state = state_string;
-                                goto Linc;
-                        L0x8A:
-                                // w_value/'''
-                                if(if_config(config_single_quotes)) {
-                                        push_token(token_sq_string);
-                                        new_state = state_sq_string;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x8B:
-                                // w_value/'{'
-                                result = begin_object();
-                                push_state(state_w_value_or_close);
-                                new_state = state_whitespace;
-                                goto Linc;
-                        L0x8C:
-                                // w_value/'['
-                                result = begin_array();
-                                push_state(state_w_value_or_close);
-                                new_state = state_whitespace;
-                                goto Linc;
-                        L0x8D:
-                                // [virtual] w_key/???
-                                if(if_config(config_unquoted_keys)) {
-                                        push_token(token_nq_key);
-                                        new_state = state_nq_string;
-                                        goto Lnoinc;
-                                }
-                                goto Lerror;
-                        L0x8E:
-                                // w_key/'"'
-                                push_token(token_key);
-                                new_state = state_string;
-                                goto Linc;
-                        L0x8F:
-                                // w_key/'''
-                                if(if_config(config_single_quotes)) {
-                                        push_token(token_sq_key);
-                                        new_state = state_sq_string;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x90:
-                                // value/???
-                                push_state(state_w_value);
-                                new_state = state_whitespace;
-                                goto Linc;
-                        L0x91:
-                                // [virtual] w_after_value/???
-                                if(if_config(config_optional_commas)) {
-                                        if(in_object()) {
-                                                if(in_object()) {
-                                                        push_state(state_w_key);
-                                                        new_state = state_whitespace;
-                                                        goto Lnoinc;
-                                                } else {
-                                                        push_state(state_w_value);
-                                                        new_state = state_whitespace;
-                                                        goto Lnoinc;
-                                                }
-                                        }
-                                        if(in_array()) {
-                                                if(in_object()) {
-                                                        push_state(state_w_key);
-                                                        new_state = state_whitespace;
-                                                        goto Lnoinc;
-                                                } else {
-                                                        push_state(state_w_value);
-                                                        new_state = state_whitespace;
-                                                        goto Lnoinc;
-                                                }
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Lnoinc;
-                                }
-                                goto Lerror;
-                        L0x92:
-                                // w_after_value/','
-                                if(if_config(config_trailing_commas)) {
-                                        push_state(state_w_value_or_close);
-                                        new_state = state_whitespace;
-                                        goto Linc;
-                                } else {
-                                        if(in_object()) {
-                                                if(in_object()) {
-                                                        push_state(state_w_key);
-                                                        new_state = state_whitespace;
-                                                        goto Linc;
-                                                } else {
-                                                        push_state(state_w_value);
-                                                        new_state = state_whitespace;
-                                                        goto Linc;
-                                                }
-                                        }
-                                        if(in_array()) {
-                                                if(in_object()) {
-                                                        push_state(state_w_key);
-                                                        new_state = state_whitespace;
-                                                        goto Linc;
-                                                } else {
-                                                        push_state(state_w_value);
-                                                        new_state = state_whitespace;
-                                                        goto Linc;
-                                                }
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x93:
-                                // w_after_value/'}'
-                                if(in_object()) {
-                                        result = end_object();
-                                        if(in_object()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x94:
-                                // w_after_value/']'
-                                if(in_array()) {
-                                        result = end_array();
-                                        if(in_object()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0x95:
-                                // [virtual] maybe_after_separator/???
+                        }
+                        goto Lerror;
+                L0x90:
+                        // value/???
+                        push_state(state_w_value);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x91:
+                        // [virtual] w_after_value/???
+                        if(if_config(config_optional_commas)) {
                                 if(in_object()) {
                                         if(in_object()) {
                                                 push_state(state_w_key);
@@ -572,47 +470,46 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                 push_state(state_error);
                                 new_state = state_whitespace;
                                 goto Lnoinc;
-                        L0x96:
-                                // w_value_or_close/'}'
+                        }
+                        goto Lerror;
+                L0x92:
+                        // w_after_value/','
+                        if(if_config(config_trailing_commas)) {
+                                push_state(state_w_value_or_close);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        } else {
                                 if(in_object()) {
-                                        result = end_object();
                                         if(in_object()) {
-                                                push_state(state_w_after_value);
+                                                push_state(state_w_key);
+                                                new_state = state_whitespace;
+                                                goto Linc;
+                                        } else {
+                                                push_state(state_w_value);
                                                 new_state = state_whitespace;
                                                 goto Linc;
                                         }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Linc;
                                 }
-                                goto Lerror;
-                        L0x97:
-                                // w_value_or_close/']'
                                 if(in_array()) {
-                                        result = end_array();
                                         if(in_object()) {
-                                                push_state(state_w_after_value);
+                                                push_state(state_w_key);
+                                                new_state = state_whitespace;
+                                                goto Linc;
+                                        } else {
+                                                push_state(state_w_value);
                                                 new_state = state_whitespace;
                                                 goto Linc;
                                         }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
-                                        new_state = state_whitespace;
-                                        goto Linc;
                                 }
-                                goto Lerror;
-                        L0x98:
-                                // null_4/'l'
-                                result = accept_null(pop_token());
+                                push_state(state_error);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0x93:
+                        // w_after_value/'}'
+                        if(in_object()) {
+                                result = end_object();
                                 if(in_object()) {
                                         push_state(state_w_after_value);
                                         new_state = state_whitespace;
@@ -626,9 +523,12 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                 push_state(state_error);
                                 new_state = state_whitespace;
                                 goto Linc;
-                        L0x99:
-                                // true_4/'e'
-                                result = accept_true(pop_token());
+                        }
+                        goto Lerror;
+                L0x94:
+                        // w_after_value/']'
+                        if(in_array()) {
+                                result = end_array();
                                 if(in_object()) {
                                         push_state(state_w_after_value);
                                         new_state = state_whitespace;
@@ -642,192 +542,310 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                 push_state(state_error);
                                 new_state = state_whitespace;
                                 goto Linc;
-                        L0x9A:
-                                // false_5/'e'
-                                result = accept_false(pop_token());
+                        }
+                        goto Lerror;
+                L0x95:
+                        // [virtual] maybe_after_separator/???
+                        if(in_object()) {
                                 if(in_object()) {
-                                        push_state(state_w_after_value);
+                                        push_state(state_w_key);
                                         new_state = state_whitespace;
-                                        goto Linc;
-                                }
-                                if(in_array()) {
-                                        push_state(state_w_after_value);
-                                        new_state = state_whitespace;
-                                        goto Linc;
-                                }
-                                push_state(state_error);
-                                new_state = state_whitespace;
-                                goto Linc;
-                        L0x9B:
-                                // [virtual] after_integer/???
-                                result = accept_integer(pop_token());
-                                if(in_object()) {
-                                        push_state(state_w_after_value);
+                                        goto Lnoinc;
+                                } else {
+                                        push_state(state_w_value);
                                         new_state = state_whitespace;
                                         goto Lnoinc;
                                 }
-                                if(in_array()) {
-                                        push_state(state_w_after_value);
+                        }
+                        if(in_array()) {
+                                if(in_object()) {
+                                        push_state(state_w_key);
+                                        new_state = state_whitespace;
+                                        goto Lnoinc;
+                                } else {
+                                        push_state(state_w_value);
                                         new_state = state_whitespace;
                                         goto Lnoinc;
                                 }
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Lnoinc;
+                L0x96:
+                        // w_value_or_close/'}'
+                        if(in_object()) {
+                                result = end_object();
+                                if(in_object()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                                if(in_array()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
                                 push_state(state_error);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0x97:
+                        // w_value_or_close/']'
+                        if(in_array()) {
+                                result = end_array();
+                                if(in_object()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                                if(in_array()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                                push_state(state_error);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0x98:
+                        // null_4/'l'
+                        result = accept_null(pop_token());
+                        if(in_object()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        if(in_array()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x99:
+                        // true_4/'e'
+                        result = accept_true(pop_token());
+                        if(in_object()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        if(in_array()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x9A:
+                        // false_5/'e'
+                        result = accept_false(pop_token());
+                        if(in_object()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        if(in_array()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Linc;
+                L0x9B:
+                        // [virtual] after_integer/???
+                        result = accept_integer(pop_token());
+                        if(in_object()) {
+                                push_state(state_w_after_value);
                                 new_state = state_whitespace;
                                 goto Lnoinc;
-                        L0x9C:
-                                // zero_integer/'.'
-                                swap_token(token_real);
-                                new_state = state_fraction_prefix;
-                                goto Linc;
-                        L0x9D:
-                                // zero_integer/$exponent
-                                swap_token(token_real);
-                                new_state = state_exponent_prefix;
-                                goto Linc;
-                        L0x9E:
-                                // integer/'.'
-                                swap_token(token_real);
-                                new_state = state_fraction_prefix;
-                                goto Linc;
-                        L0x9F:
-                                // integer/$exponent
-                                swap_token(token_real);
-                                new_state = state_exponent_prefix;
-                                goto Linc;
-                        L0xA0:
-                                // [virtual] after_real/???
-                                result = accept_real(pop_token());
+                        }
+                        if(in_array()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Lnoinc;
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Lnoinc;
+                L0x9C:
+                        // zero_integer/'.'
+                        swap_token(token_real);
+                        new_state = state_fraction_prefix;
+                        goto Linc;
+                L0x9D:
+                        // zero_integer/$exponent
+                        swap_token(token_real);
+                        new_state = state_exponent_prefix;
+                        goto Linc;
+                L0x9E:
+                        // integer/'.'
+                        swap_token(token_real);
+                        new_state = state_fraction_prefix;
+                        goto Linc;
+                L0x9F:
+                        // integer/$exponent
+                        swap_token(token_real);
+                        new_state = state_exponent_prefix;
+                        goto Linc;
+                L0xA0:
+                        // [virtual] after_real/???
+                        result = accept_real(pop_token());
+                        if(in_object()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Lnoinc;
+                        }
+                        if(in_array()) {
+                                push_state(state_w_after_value);
+                                new_state = state_whitespace;
+                                goto Lnoinc;
+                        }
+                        push_state(state_error);
+                        new_state = state_whitespace;
+                        goto Lnoinc;
+                L0xA1:
+                        // start_escape/???
+                        if(push_token(token_escape)) {
+                                return alloc_error(p);
+                        }
+                        new_state = state_escape;
+                        goto Linc;
+                L0xA2:
+                        // string/'"'
+                        if(ifpeek_token(token_string)) {
+                                result = accept_string(pop_token());
                                 if(in_object()) {
                                         push_state(state_w_after_value);
                                         new_state = state_whitespace;
-                                        goto Lnoinc;
+                                        goto Linc;
                                 }
                                 if(in_array()) {
                                         push_state(state_w_after_value);
                                         new_state = state_whitespace;
-                                        goto Lnoinc;
+                                        goto Linc;
                                 }
                                 push_state(state_error);
                                 new_state = state_whitespace;
-                                goto Lnoinc;
-                        L0xA1:
-                                // start_escape/???
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_key)) {
+                                        result = accept_key(pop_token());
+                                        push_state(state_w_after_key);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                        }
+                        goto Lerror;
+                L0xA3:
+                        // sq_string/'''
+                        if(ifpeek_token(token_sq_string)) {
+                                result = accept_sq_string(pop_token());
+                                if(in_object()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                                if(in_array()) {
+                                        push_state(state_w_after_value);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                                push_state(state_error);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_sq_key)) {
+                                        result = accept_sq_key(pop_token());
+                                        push_state(state_w_after_key);
+                                        new_state = state_whitespace;
+                                        goto Linc;
+                                }
+                        }
+                        goto Lerror;
+                L0xA4:
+                        // nq_string/'\'
+                        if(if_config(config_escape_characters)) {
+                                if(push_token(token_escape_chars)) {
+                                        return alloc_error(p);
+                                }
+                                new_state = state_escape_chars;
+                                goto Linc;
+                        } else {
                                 if(push_token(token_escape)) {
                                         return alloc_error(p);
                                 }
                                 new_state = state_escape;
                                 goto Linc;
-                        L0xA2:
-                                // string/'"'
-                                if(ifpeek_token(token_string)) {
-                                        result = accept_string(pop_token());
-                                        if(in_object()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
+                        }
+                        goto Lerror;
+                L0xA5:
+                        // nq_string/' '
+                        if(ifpeek_token(token_nq_string)) {
+                                result = accept_nq_string(pop_token());
+                                if(in_object()) {
+                                        push_state(state_w_after_value);
                                         new_state = state_whitespace;
                                         goto Linc;
-                                } else {
-                                        if(ifpeek_token(token_key)) {
-                                                result = accept_key(pop_token());
-                                                push_state(state_w_after_key);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
                                 }
-                                goto Lerror;
-                        L0xA3:
-                                // sq_string/'''
-                                if(ifpeek_token(token_sq_string)) {
-                                        result = accept_sq_string(pop_token());
-                                        if(in_object()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
+                                if(in_array()) {
+                                        push_state(state_w_after_value);
                                         new_state = state_whitespace;
                                         goto Linc;
-                                } else {
-                                        if(ifpeek_token(token_sq_key)) {
-                                                result = accept_sq_key(pop_token());
-                                                push_state(state_w_after_key);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
                                 }
-                                goto Lerror;
-                        L0xA4:
-                                // nq_string/'\'
-                                if(if_config(config_escape_characters)) {
-                                        if(push_token(token_escape_chars)) {
-                                                return alloc_error(p);
-                                        }
-                                        new_state = state_escape_chars;
-                                        goto Linc;
-                                } else {
-                                        if(push_token(token_escape)) {
-                                                return alloc_error(p);
-                                        }
-                                        new_state = state_escape;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0xA5:
-                                // nq_string/' '
-                                if(ifpeek_token(token_nq_string)) {
-                                        result = accept_nq_string(pop_token());
-                                        if(in_object()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        if(in_array()) {
-                                                push_state(state_w_after_value);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
-                                        push_state(state_error);
+                                push_state(state_error);
+                                new_state = state_whitespace;
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_nq_key)) {
+                                        result = accept_nq_key(pop_token());
+                                        push_state(state_w_after_key);
                                         new_state = state_whitespace;
                                         goto Linc;
-                                } else {
-                                        if(ifpeek_token(token_nq_key)) {
-                                                result = accept_nq_key(pop_token());
-                                                push_state(state_w_after_key);
-                                                new_state = state_whitespace;
-                                                goto Linc;
-                                        }
                                 }
-                                goto Lerror;
-                        L0xA6:
-                                // select_string/???
-                                if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
-                                        new_state = state_string;
+                        }
+                        goto Lerror;
+                L0xA6:
+                        // select_string/???
+                        if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
+                                new_state = state_string;
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
+                                        new_state = state_sq_string;
                                         goto Linc;
                                 } else {
-                                        if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
-                                                new_state = state_sq_string;
-                                                goto Linc;
-                                        } else {
-                                                new_state = state_nq_string;
-                                                goto Linc;
-                                        }
+                                        new_state = state_nq_string;
+                                        goto Linc;
                                 }
-                                goto Lerror;
-                        L0xA7:
-                                // end_escape/???
+                        }
+                        goto Lerror;
+                L0xA7:
+                        // end_escape/???
+                        if(process_escape(pop_token())) {
+                                return alloc_error(p);
+                        }
+                        if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
+                                new_state = state_string;
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
+                                        new_state = state_sq_string;
+                                        goto Linc;
+                                } else {
+                                        new_state = state_nq_string;
+                                        goto Linc;
+                                }
+                        }
+                        goto Lerror;
+                L0xA8:
+                        // escape/'''
+                        if(if_config(config_single_quotes)) {
                                 if(process_escape(pop_token())) {
                                         return alloc_error(p);
                                 }
@@ -843,157 +861,118 @@ jsonpg_type parse_next(jsonpg_parser p) {
                                                 goto Linc;
                                         }
                                 }
-                                goto Lerror;
-                        L0xA8:
-                                // escape/'''
-                                if(if_config(config_single_quotes)) {
-                                        if(process_escape(pop_token())) {
-                                                return alloc_error(p);
-                                        }
-                                        if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
-                                                new_state = state_string;
-                                                goto Linc;
-                                        } else {
-                                                if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
-                                                        new_state = state_sq_string;
-                                                        goto Linc;
-                                                } else {
-                                                        new_state = state_nq_string;
-                                                        goto Linc;
-                                                }
-                                        }
-                                }
-                                goto Lerror;
-                        L0xA9:
-                                // escape/'u'
-                                swap_token(token_escape_u);
-                                new_state = state_hex_1;
-                                goto Linc;
-                        L0xAA:
-                                // escape_chars/...
-                                if(process_escape_chars(pop_token())) {
-                                        return alloc_error(p);
-                                }
-                                new_state = state_nq_string;
-                                goto Linc;
-                        L0xAB:
-                                // hex_1/$hex_digit
-                                if(!ifpeek_token(token_surrogate)) {
-                                        new_state = state_hex_2;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0xAC:
-                                // hex_1/'d'
-                                if(ifpeek_token(token_surrogate)) {
-                                        new_state = state_low_surrogate_2;
-                                        goto Linc;
-                                } else {
-                                        new_state = state_high_surrogate_2;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0xAD:
-                                // hex_1/'D'
-                                if(ifpeek_token(token_surrogate)) {
-                                        new_state = state_low_surrogate_2;
-                                        goto Linc;
-                                } else {
-                                        new_state = state_high_surrogate_2;
-                                        goto Linc;
-                                }
-                                goto Lerror;
-                        L0xAE:
-                                // high_surrogate_2/$high_surrogate_2
-                                push_token(token_surrogate);
-                                new_state = state_hex_3;
-                                goto Linc;
-                        L0xAF:
-                                // low_surrogate_2/$low_surrogate_2
-                                pop_token();
-                                new_state = state_hex_3;
-                                goto Linc;
-                        L0xB0:
-                                // hex_4/$hex_digit
-                                if(ifpeek_token(token_surrogate)) {
-                                        new_state = state_low_surrogate;
-                                        goto Linc;
-                                }
-                                if(process_escape_u(pop_token())) {
-                                        return alloc_error(p);
-                                }
-                                if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
-                                        new_state = state_string;
-                                        goto Linc;
-                                } else {
-                                        if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
-                                                new_state = state_sq_string;
-                                                goto Linc;
-                                        } else {
-                                                new_state = state_nq_string;
-                                                goto Linc;
-                                        }
-                                }
-                                goto Lerror;
-                        Linc:
-                                p->current++;
-                        Lnoinc:
-                                if(new_state == state_error)
-                                        goto Lerror;
-
-                                p->state = new_state;
-                                
-                        //
-                        // if(new_state == state_error)
-                        //         return parse_error(p);
-                        //
-                        // JSONPG_LOG("New state: %s, use %s input\n",
-                        //                 states[new_state],
-                        //                 incr ? "next" : "same");
-                        //
-                        // p->state = new_state;
-                        // p->current += incr;
-                        //
-                        // if(result == JSONPG_NONE) {
-                        //         return result;
-                        // }
-
-                                if(result == JSONPG_NONE)
-                                        continue;
-                                
-                                return result;
-
-                        Lerror:
-                                return parse_error(p);
-                }
-                if(p->seen_eof) {
-
-                        JSONPG_LOG("Exiting... state=%s, push_state=%s token_ptr=%d, stack_ptr=%d\n",
-                                        states[p->state],
-                                        states[p->push_state],
-                                        p->token_ptr,
-                                        p->stack.ptr);
-
-                        // no whitespace after number leaves it dangling
-                        if(p->state == state_zero_integer
-                                        || p->state == state_integer) {
-                                p->push_state = state_error;
-                                p->state = state_whitespace;
-                                return accept_integer(pop_token());
-                        } else if(p->state == state_fraction
-                                        || p->state == state_exponent) {
-                                p->push_state = state_error;
-                                p->state = state_whitespace;
-                                return accept_real(pop_token());
                         }
+                        goto Lerror;
+                L0xA9:
+                        // escape/'u'
+                        swap_token(token_escape_u);
+                        new_state = state_hex_1;
+                        goto Linc;
+                L0xAA:
+                        // escape_chars/...
+                        if(process_escape_chars(pop_token())) {
+                                return alloc_error(p);
+                        }
+                        new_state = state_nq_string;
+                        goto Linc;
+                L0xAB:
+                        // hex_1/$hex_digit
+                        if(!ifpeek_token(token_surrogate)) {
+                                new_state = state_hex_2;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0xAC:
+                        // hex_1/'d'
+                        if(ifpeek_token(token_surrogate)) {
+                                new_state = state_low_surrogate_2;
+                                goto Linc;
+                        } else {
+                                new_state = state_high_surrogate_2;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0xAD:
+                        // hex_1/'D'
+                        if(ifpeek_token(token_surrogate)) {
+                                new_state = state_low_surrogate_2;
+                                goto Linc;
+                        } else {
+                                new_state = state_high_surrogate_2;
+                                goto Linc;
+                        }
+                        goto Lerror;
+                L0xAE:
+                        // high_surrogate_2/$high_surrogate_2
+                        push_token(token_surrogate);
+                        new_state = state_hex_3;
+                        goto Linc;
+                L0xAF:
+                        // low_surrogate_2/$low_surrogate_2
+                        pop_token();
+                        new_state = state_hex_3;
+                        goto Linc;
+                L0xB0:
+                        // hex_4/$hex_digit
+                        if(ifpeek_token(token_surrogate)) {
+                                new_state = state_low_surrogate;
+                                goto Linc;
+                        }
+                        if(process_escape_u(pop_token())) {
+                                return alloc_error(p);
+                        }
+                        if(ifpeek_token(token_string) || ifpeek_token(token_key)) {
+                                new_state = state_string;
+                                goto Linc;
+                        } else {
+                                if(ifpeek_token(token_sq_string) || ifpeek_token(token_sq_key)) {
+                                        new_state = state_sq_string;
+                                        goto Linc;
+                                } else {
+                                        new_state = state_nq_string;
+                                        goto Linc;
+                                }
+                        }
+                        goto Lerror;
+                Linc:
+                        p->current++;
+                Lnoinc:
+                        if(new_state == state_error)
+                                goto Lerror;
 
-                        return (p->push_state == state_error
-                                        && p->token_ptr == 0 
-                                        && p->stack.ptr == p->stack.ptr_min)
-                               ? JSONPG_EOF
-                               : parse_error(p);
-                } else if(-1 == parser_read_next(p)) {
-                        return file_read_error(p);
-                }
+                        p->state = new_state;
+                        
+                        if(result == JSONPG_NONE)
+                                continue;
+                        
+                        return result;
+
+                Lerror:
+                        return parse_error(p);
         }
+
+        JSONPG_LOG("Exiting... state=%s, push_state=%s token_ptr=%d, stack_ptr=%d\n",
+                        states[p->state],
+                        states[p->push_state],
+                        p->token_ptr,
+                        p->stack.ptr);
+
+        // no whitespace after number leaves it dangling
+        if(p->state == state_zero_integer
+                        || p->state == state_integer) {
+                p->push_state = state_error;
+                p->state = state_whitespace;
+                return accept_integer(pop_token());
+        } else if(p->state == state_fraction
+                        || p->state == state_exponent) {
+                p->push_state = state_error;
+                p->state = state_whitespace;
+                return accept_real(pop_token());
+        }
+
+        return (p->push_state == state_error
+                        && p->token_ptr == 0 
+                        && p->stack.ptr == p->stack.ptr_min)
+               ? JSONPG_EOF
+               : parse_error(p);
 }

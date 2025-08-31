@@ -66,7 +66,7 @@ static jsonpg_type set_result_error(jsonpg_parser p, jsonpg_error_code code)
         p->result.type = JSONPG_ERROR;
         p->result.error.code = code;
         p->result.error.at = (p->input && p->current)
-                ? p->processed + (p->current - p->input)
+                ? p->current - p->input
                 : 0;
 
 #ifdef JSONPG_DEBUG
