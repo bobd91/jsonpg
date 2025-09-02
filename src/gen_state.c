@@ -142,7 +142,9 @@ typedef enum {
         CMD_IF_POP,
         CMD_POP,
         CMD_SWAP,
-        CMD_IF_CONFIG
+        CMD_IF_CONFIG,
+        CMD_SKIP_WHILE,
+        CMD_SKIP_STRING_UNTIL
 } builtin_type;
 
 
@@ -150,6 +152,7 @@ typedef enum {
         ARG_STATE,
         ARG_TOKEN,
         ARG_FLAG,
+        ARG_CHAR,
         ARG_OR     // multiple args or'ed together
 } arg_type;
 
@@ -162,7 +165,9 @@ static arg_type arg_types[] = {
         ARG_TOKEN,
         ARG_TOKEN,
         ARG_TOKEN,
-        ARG_FLAG | ARG_OR
+        ARG_FLAG | ARG_OR,
+        ARG_CHAR,
+        ARG_CHAR
 };
 
 MAPPING(builtins)
@@ -175,6 +180,8 @@ MAP("ifpop", CMD_IF_POP)
 MAP("pop", CMD_POP)
 MAP("swap", CMD_SWAP)
 MAP("ifconfig", CMD_IF_CONFIG)
+MAP("skip_while", CMD_SKIP_WHILE)
+MAP("skip_string_until", CMD_SKIP_STRING_UNTIL)
 MAPPING_END()
 
 typedef struct gen_arg_list_s *arg_list;
@@ -598,6 +605,8 @@ int validate_builtin(gen_builtin b)
         switch(b->type) {
         case CMD_PUSH_STATE:
         case CMD_POP_STATE:
+        case CMD_SKIP_WHILE:
+        case CMD_SKIP_STRING_UNTIL:
                 // no validation required
                 break;
         case CMD_IF_CONFIG:
@@ -1057,6 +1066,21 @@ void render_builtin(int is_virtual, gen_builtin command, gen_renderer code)
                 render_indent(code, "swap_token(token_");
                 render(code, args->arg);
                 render(code, ");");
+                break;
+        case CMD_SKIP_WHILE:
+                render_indent(code, "skip_while('");
+                render(code, args->arg);
+                render(code, "');");
+                render_indent(code, "new_state = p->state;");
+                render_indent(code, "goto Lnoinc;");
+
+                break;
+        case CMD_SKIP_STRING_UNTIL:
+                render_indent(code, "skip_string_until('");
+                render(code, args->arg);
+                render(code, "');");
+                render_indent(code, "new_state = p->state;");
+                render_indent(code, "goto Lnoinc;");
                 break;
         default:
                 fail("Unexpected builtin command '%s' [%d]", command->name, command->type);

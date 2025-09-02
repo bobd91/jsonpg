@@ -9,6 +9,7 @@
 
 //#define JSONPG_DEBUG
 #include "debug.c"
+#include "fast_strtod"
 #include "alloc.c"
 #include "strbuf.c"
 #include "utf8.c"

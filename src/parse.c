@@ -126,6 +126,7 @@ static int set_string_value(jsonpg_parser p, token t)
                 if(write_b(t->pos, p->current - t->pos))
                         return -1;
                 p->result.string.length = get_content(&p->result.string.bytes);
+                p->write_buf->count = 0;
         } else {
                 p->result.string.bytes = t->pos;
                 p->result.string.length = p->current - t->pos;
@@ -272,7 +273,7 @@ void parser_set_dom_info(jsonpg_parser p, dom_info di)
 
 jsonpg_parser parser_reset(jsonpg_parser p)
 {
-        p->write_buf = str_buf_reset(p->write_buf);
+        str_buf_reset(p->write_buf);
         
         p->input = NULL;
 
@@ -351,15 +352,13 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
         uint16_t flags = opts.flags;
 
         size_t struct_bytes = sizeof(struct jsonpg_parser_s);
-        // 1-8 => 1, 9-16 => 2, etc
-        size_t stack_bytes = (stack_size + 7) / 8;
         arena a = arena_new();
         if(!a)
                 return NULL;
-        jsonpg_parser p = arena_alloc(a, struct_bytes + stack_bytes);
+        jsonpg_parser p = arena_alloc(a, struct_bytes + ((stack_size + 7) / 8));
         if(p) {
                 p->arena = a;
-                p->write_buf = str_buf_empty(a);
+                p->write_buf = str_buf_new(a, 0);
                 if(!p->write_buf) {
                         jsonpg_parser_free(p);
                         return NULL;

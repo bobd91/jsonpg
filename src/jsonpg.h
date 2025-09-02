@@ -202,7 +202,9 @@ typedef struct {
         // Validation of JSON format, the correct nesting of arrays/objects
         // And the correct positioning of keys requires the nesting of
         // these items to be tracked
-        // Set to 0 to disable this tracking
+        // Set this option to +ive to enable tracking
+        // If 0 < max_nesting < 1024 the value will be set to 1024, more than enough 
+        // for most use cases
         // Validation of numerics and UTF8 sequences cannot be disabled
         size_t max_nesting;
 
@@ -210,8 +212,7 @@ typedef struct {
 
 jsonpg_generator jsonpg_generator_new_opt(jsonpg_generator_opts);
 #define jsonpg_generator_new(...)  jsonpg_generator_new_opt(    \
-                (jsonpg_generator_opts){ .max_nesting = 1024,   \
-                                         __VA_ARGS__ })           
+                (jsonpg_generator_opts){ __VA_ARGS__ })           
 
 // The lifetime of results is that of their generator.
 // A string or dom returned from these functions should not be used

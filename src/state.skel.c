@@ -32,7 +32,20 @@
 #define process_escape(X)       process_escape(p, (X))
 #define process_escape_chars(X) process_escape_chars(p, (X))
 #define process_escape_u(X)     process_escape_u(p, (X))
-
+#define skip_while(X)           do {                                            \
+                                        while(++p->current < last               \
+                                                        && (X) == *p->current); \
+                                        break;                                  \
+                                } while(1)
+#define skip_string_until(X)    do {                                            \
+                                        uint8_t c;                              \
+                                        while(++p->current < last               \
+                                                        && (X) != (c = *p->current)\
+                                                        && '\\' != c            \
+                                                        && 0x20 <= c            \
+                                                        && 0x7F >= c);          \
+                                        break;                                  \
+                                }while(1)
 typedef enum {
         config_comments = JSONPG_FLAG_COMMENTS,
         config_trailing_commas = JSONPG_FLAG_TRAILING_COMMAS,

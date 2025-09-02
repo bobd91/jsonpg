@@ -14,7 +14,7 @@
 
 
 "whitespace": {
-        "$whitespace": "whitespace",
+        "$whitespace": {"skip_while": " "},
         "/": [{"ifconfig": "comments"}, "comment_leader", {"popstate": ""}],
         "???": {"popstate": ""}
 },
@@ -201,9 +201,9 @@
 "string": {
         "\\": "start_escape",
         "\"": [{"ifpop": "string"}, "maybe_after_value", "end_key"],
-        "0x20-0x21": "string",
-        "0x23-0x5B": "string",
-        "0x5D-0x7F": "string",
+        "0x20-0x21": {"skip_string_until": "\""},
+        "0x23-0x5B": {"skip_string_until": "\""},
+        "0x5D-0x7F": {"skip_string_until": "\""},
         "0xC2-0xDF": "continuation_1",
         "0xE0": "check_e0",
         "0xE1-0xEC": "continuation_2",
@@ -221,9 +221,9 @@
 "sq_string": {
         "\\": "start_escape",
         "'": [{"ifpop": "sq_string"}, "maybe_after_value", "end_sq_key"],
-        "0x20-0x26": "sq_string",
-        "0x28-0x5B": "sq_string",
-        "0x5D-0x7F": "sq_string",
+        "0x20-0x26": {"skip_string_until": "\\'"},
+        "0x28-0x5B": {"skip_string_until": "\\'"},
+        "0x5D-0x7F": {"skip_string_until": "\\'"},
         "0xC2-0xDF": "continuation_1",
         "0xE0": "check_e0",
         "0xE1-0xEC": "continuation_2",
@@ -242,8 +242,8 @@
 "nq_string": {
         "\\": [{"ifconfig": "escape_characters"}, "start_escape_chars", "start_escape"],
         " ": [{"ifpop": "nq_string"}, "maybe_after_value", "end_nq_key"],
-        "0x21-0x5B": "nq_string",
-        "0x5D-0x7F": "nq_string",
+        "0x21-0x5B": {"skip_string_until": " "},
+        "0x5D-0x7F": {"skip_string_until": " "},
         "0xC2-0xDF": "continuation_1",
         "0xE0": "check_e0",
         "0xE1-0xEC": "continuation_2",

@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
                                         fread(buf, length, 1, fh);
                                         res = (jsonpg_value){};
                                         for(int i = 0 ; i < times ; i++) {
-                                                jsonpg_generator g = jsonpg_generator_new(.max_nesting = 0);
+                                                jsonpg_generator g = jsonpg_generator_new();
                                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                                 if(res.type == JSONPG_ERROR) {
                                                         perror("Parse 2 failed");
