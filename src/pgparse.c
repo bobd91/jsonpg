@@ -1,6 +1,9 @@
 
-#define JSONPG_PARSE_ERROR(P, C)        parse_error((P), JSONPG_ERROR_##C)
+#define JSONPG_PARSE_ERROR(P, C)        parse_error((P), JSONPG_ERROR_##C, )
 #define JSPONG_ERROR_TRAILING_COMMA 1
+
+typedef unsigned char Byte;
+typedef unsigned char *Bytes;
 
 void parse_error(JsonpgParser p, unsigned error_code)
 {
@@ -36,108 +39,37 @@ bool parse_comma(p)
 }
 
 
-
-void parse_element(JspParser p)
-{
-        consume_whitespace(p);
-        parse_value(p);
-        consume_whitespace(p);
-}
-
-void parse_member(JspParser p)
-{
-        consume_whitespace(p);
-        parse_string(p, true);
-        consume_whitespace(p);
-        if(!input_peek(p) == ':')
-                parser_error(p, COLON);
-        input.take(p);
-        parse_element(p);
-}
-
-void parse_object(JpgParser p)
-{
-        input_take(p); // '{'
-
-        unsigned element_count = 0;
-
-        output_begin_object(p->g);
-        consume_whitespace(p);
-        while(input_peek(p) != '}') {
-                parse_member(p);
-                element_count++;
-                if(input_peek(p) == ',') {
-                        input_take(p);
-                        consume_whitespace(p);
-                        continue;
-                }
-#ifdef JSONPG_FLAG_OPTIONAL_COMMA
-                if(!input_eof(p))
-                        continue;
-#endif
-                break;
-        }
-#ifndef
-        output_end_object(p->g, element_count);
-}
-
-void parse_array(JpgParser p)
-{
-        input_take(p); // '['
-
-        unsigned element_count = 0;
-
-        output_begin_array(p->g);
-        consume_whitespace(p);
-        while(input_peek(p) != ']') {
-                parse_element(p);
-                element_count++;
-                if(input_peek(p) == ',') {
-                        input_take(p);
-                        consume_whitespace(p);
-                        continue;
-                }
-#ifdef JSONPG_FLAG_OPTIONAL_COMMA
-                if(!input_eof(p))
-                        continue;
-#endif
-                break;
-        }
-#ifndef
-        output_end_array(p->g, element_count);
-}
-
 void parse_true(JpgParser p)
 {
-        input_take(p); // 't'
-        if(input_consume(p, 'r')
-                        && input_consume(p, 'u')
-                        && input_comsume(p, 'e'))
-                output_bool(p->g, true);
-        else
+        JSONPG_ASSERT(input_peek(p) == 't');
+
+        input_take(p);
+        if(!input_consume(p, 'r')
+                        || !input_consume(p, 'u')
+                        || !input_comsume(p, 'e'))
                 parse_error(p, UNEXPECTED);
 }
 
 void parse_false(JpgParser p)
 {
-        input_take(p); // 'f'
-        if(input_consume(p, 'a')
-                        && input_consume(p, 'l')
-                        && input_consume(p, 's')
-                        && input_comsume(p, 'e'))
-                output_bool(p->g, true);
-        else
+        JSONPG_ASSERT(input_peek(p) == 'f');
+
+        input_take(p);
+        if(!input_consume(p, 'a')
+                        || !input_consume(p, 'l')
+                        || !input_consume(p, 's')
+                        || !input_comsume(p, 'e'))
                 parse_error(p, UNEXPECTED);
 }
 
 void parse_null(JpgParser p)
 {
+        JSONPG_ASSERT(input_peek(p) == 'n');
+
         input_take(p); // 'n'
-        if(input_consume(p, 'u')
-                        && input_consume(p, 'l')
-                        && input_comsume(p, 'l'))
-                output_bool(p->g, true);
-        else
+        if(!input_consume(p, 'u')
+                        || !input_consume(p, 'l')
+                        || !input_comsume(p, 'l'))
                 parse_error(p, UNEXPECTED);
 }
 
@@ -203,54 +135,297 @@ unsigned parse_escape(JpgParser p)
         }
 }
 
-
-void copy_safe_chars(InputStream is, StackStream os)
+MemoryInputStream mis_new(Allocator a, Bytes bytes, size_t count)
 {
-#if defined(JSONPG_SSE2) || defined(JSONPG_SSE42)
-        // rapidjson/include/rapidjson/reader.h#ScanCopyUnescapedString
-        // but not set up for testing SSE ATM
-#elif defined(JSONPG_NEON)
-        // rapidjson/include/rapidjson/reader.h#ScanCopyUnescapedString
-        // but not set up for testing NEON ATM
-#endif
-        // does nothing if no SIMD available
+        MemoryInputStream is = memory_allocate(a,
+                                        sizeof(struct memory_input_stream_s));
+        if(!mis)
+                return NULL;
+        is->bytes = bytes;
+        is->count = count;
+        is->current = 0;
 }
 
-void parse_string_to_stack(JpgParser p, StackStream os)
+size_t mis_tell(MemoryInputStream mis)
+{
+        JSONPG_ASSERT(mis);
+
+        return mis->current;
+}
+
+Bytes mis_at(MemoryInputStream mis, size_t pos)
+{
+        JSONPG_ASSERT(mis);
+
+        if(pos >= mis->count)
+                return NULL;
+
+        return mis->bytes + pos;
+}
+
+size_t mis_length(MemoryInputStream mis)
+{
+        JSONPG_ASSERT(mis);
+
+        return mis->count;
+}
+
+bool mis_eof(MemoryInputStream mis)
+{
+        JSONPG_ASSERT(mis);
+        JSONPG_ASSERT(mis->current <= mis->count);
+
+        return mis->current == mis->count;
+}
+
+Byte mis_peek(MemoryInputStream mis)
+{
+        JSONPG_ASSERT(mis);
+
+        if(mis_eof(mis))
+                return '\0';
+
+        return mis->bytes[mis->current];
+}
+
+Byte mis_take(MemoryInputStream mis)
+{
+        JSONPG_ASSERT(mis);
+
+        if(mes_eof(mis))
+                return '\0';
+
+        return mis->bytes[mis->current++];
+}
+
+bool mis_consume(MemoryInputStream mis, Byte b)
+{
+        JSONPG_ASSERT(mis);
+
+        if(mis_peek(mis) != b)
+                return false;
+
+        mis_take(mis);
+        return true;
+}
+
+void consume_whitespace(Parser p)
+{
+        JSONPG_ASSERT(p);
+
+        MemoryInputStream is = p->is;
+
+        Bytes c;
+
+#ifdef JSONPG_FLAG_COMMENTS
+        while(true) {
+#endif
+
+        while((c = mis_peek(is)) == ' ' || c == '\n' || c == '\r' || c== '\t')
+                mis_take(is);
+
+#ifdef JSONPG_FLAG_COMMENTS
+        if(mis_consume(is, '/')) {
+                if(mis_consume(is, '*')) {
+                        while(true) {
+                                if(mis_peek(is) == '\0') {
+                                        return;
+                                } else if(mis_consume(is, '*')) {
+                                        if(mis_consume(is, '/'))
+                                                break;
+                                } else
+                                        mis_take(is);
+                        }
+                } else if(mis_consume(is, '/')) {
+                        while(mis_peek(is) != '\0' && mis_take(mis) != '\n')
+                                ;
+                } else {
+                        return;
+                }
+                continue;
+        } else {
+                break;
+        }
+#endif
+}
+
+MemoryOutputStream mos_new(allocator a)
+{
+        JSONPG_ASSERT(a);
+
+        MemoryOutputStream os = memory_allocate(a, 
+                                        sizeof(struct memory_output_stream_s));
+        if(!os)
+                return NULL;
+        os->allocator = a
+        os->capacity = 0;
+        os->count = 0;
+        os->buffer = NULL;
+
+        return os;
+}
+
+size_t mos_length(MemoryOutputStream os)
+{
+        JSONPG_ASSERT(os);
+
+        return os->count;
+}
+
+Bytes mos_pop(MemoryOutputStream os)
+{
+        JSONPG_ASSERT(os);
+
+        os->count = 0;
+        return os->buffer;
+}
+
+void mos_advance(MemoryOutputStream os, size_t amount)
+{
+        JSONPG_ASSERT(os);
+
+        os->count += amount;
+}
+
+Bytes mos_grow(MemoryOutputStream os, size_t incr)
+{
+        JSONPG_ASSERT(os);
+
+        size_t size = os->capacity 
+                ? os->capacity << 1
+                : JSONPG_DEFAULT_BUFFER_SIZE;
+
+        size_t required = os->capacity + incr;
+
+        while(size < required)
+                size << 1;
+
+        Bytes new;
+        if(os->buffer)
+                new = memory_reallocate(os->allocator, buffer, size);
+        else
+                new = memory_allocate(os->allocator, size);
+
+        if(new) {
+                os->buffer = new;
+                os->capacity = size;
+        }
+
+        return new;
+}
+
+
+Bytes mos_reserve(MemoryOutputStream os, size_t count)
+{
+        JSONPG_ASSERT(os);
+
+        if(count > os->capacity - os->count)
+                if(!mos_grow(os, count))
+                        return NULL;
+        return os->buffer + os->count;
+}
+
+
+
+size_t cow_length(CowStream cs)
+{
+        JSONPG_ASSERT(cs);
+
+        return cs->copied
+                ? mos_length(cs->os)
+                : input_length(cs->is) - cs->ptr;
+}
+
+Bytes cow_pop(CowStream cs)
+{
+        JSONPG_ASSERT(cs);
+
+        return cs->copied
+                ? mos_pop(cs->os)
+                : input_at(cs->is, cs->ptr);
+}
+
+void cow_advance(CowStream cs, size_t count)
+{
+        JSONPG_ASSERT(cs);
+
+        mos_advance(cs->os, count);
+        cs->is_ptr = input_tell(cs->is);
+}
+
+Bytes cow_reserve(CowStream cs, size_t count)
+{
+        JSONPG_ASSERT(cs);
+
+        cs->copied = true;
+        MemoryOutputStream os = cs->os;
+        InputStream is = cs->is;
+        size_t to_copy = input_tell(is) - cs->ptr;
+        Bytes s = mos_reserve(os, to_copy + count);
+        if(!s)
+                return NULL;
+
+        memcpy(s, input_at(cs->is, cs->is_ptr), to_copy);
+        mos_advance(os, to_copy);
+        return s;
+}
+
+bool cow_finalize(CowStream cs)
+{
+        JSONPG_ASSERT(cs);
+
+        return cs->copied
+                ? cow_reserve(cs, 0)
+                : true;
+}
+
+void parse_string_to_cow(JpgParser p, CowStream cs)
 {
         while(true) {
-
-                copy_safe_chars(p->is, os);
+                //copy_safe_chars(p->is, os);
                 
                 unsigned char c = input_peek(p);
                 if(c == '\\') {
                         unsigned codepoint = parse_escape(p);
-                        stack_stream_codepoint(os, p, codepoint);
+                        Bytes s = cow_reserve(cs, 4);
+                        if(!s)
+                                parse_error(p, MEMORY);
+                        int count = utf8_encode(codepoint, s);
+                        if(count == -1)
+                                parse_error(p, UTF8);
+                        cow_advance(cs, count);
                 } else if(c == '"') {
+                        if(!cow_finalize(cs))
+                                parse_error(p, MEMORY);
                         input_take(p);
-                        break;
+                        return;
                 } else if(c < 0x20) {
                         parse_error(p, INVALID);
+                } else if(c >= 0x80) {
+                        if(-1 == utf8_sequence_length(p))
+                                parse_error(p, UTF8);
                 } else {
-                        int bytes validate_utf8_sequence(p);
-                        stack_stream_put_n(os, p);
+                        input_take(p);
                 }
         }
-        stack_stream_emit(p);
 }
 
-void parse_string(JpgParser p, bool is_key)
+size_t parse_string(JpgParser p, Bytes *bytes)
 {
+        JSONPG_ASSERT(p);
+        JSONPG_ASSERT(input_peek(p) == '"');
+
         input_take(p); // "
 
-        StackStream os = stack_stream_new(p);
-        parse_string_to_stack(p, os);
-        size_t length = stack_stream_length(os);
-        ByteString str = stack_stream_pop(os);
-        if(is_key)
-                output_key_bytes(p->g, str, length);
-        else
-                output_string_bytes(p->g, str, length);
+        CowStream cs = cow_new(p);
+        if(!cs)
+                return 0;
+
+        parse_string_to_cow(p, cs);
+        size_t length = cow_length(cs);
+        Bytes str = cow_pop(cs);
+        *bytes = str;
+        return length;
 }
 
 double pow_10(unsigned n) {
@@ -299,9 +474,8 @@ double strtod_normal(double d, int e)
         return d;
 }
 
-void parse_number(JsgParser p, bool is_positive)
+bool parse_number(JsgParser p, *double real, *long integer)
 {
-        size_t number_offset = input_tell(p) - is_positive ? 0 : 1;
         bool force_double = false;
         bool overflow = false;
         sign = 1;
@@ -316,7 +490,7 @@ void parse_number(JsgParser p, bool is_positive)
         if(c >= '0' && c <= '9')
                 sum = c - '0';
         else
-                parse_error(p, NUMBER, number_offset);
+                parse_error(p, NUMBER);
 
         c = input_take(p);
         if(sum) {
@@ -359,7 +533,7 @@ void parse_number(JsgParser p, bool is_positive)
                         }
                         c = input_take(p);
                 else
-                        parse_error(p, NUMBER, number_offset);
+                        parse_error(p, NUMBER);
 
                 while(c >= '0' && c <= '9')
                         if(!overflow) {
@@ -392,113 +566,228 @@ void parse_number(JsgParser p, bool is_positive)
                         while(c >= '0' && c <= '9') {
                                 exp = 10 * exp + c - '0';
                                 if(exp < 0)
-                                        parse_error(p, NUMBER, number_offset);
+                                        parse_error(p, NUMBER);
                                 c = input_take(p);
                         }
                 } else {
-                        parse_error(p, NUMBER, number_offset);
+                        parse_error(p, NUMBER);
                 }
                 exponent += exp_sign * exp;
         }
 
-        if(!force_double && exponent >= 0) {
-                output_integer(p->g, sign * sum);
+        if(force_double || overflow) {
+                *real = sign * strtod((double)sum, exponent);
+                return true;
         } else {
-                output_real(p->g, sign * strtod_normal((double)sum, exponent));
+                *integer = sign * sum;
+                return false;
         }
 }
         
 
-void parse_value(JpgParser p)
+void parse_value(JpgParser p, Nesting nesting)
 {
-        switch(input_peek(p)) {
-        case '"': 
-                parse_string(p, false); 
-                return;
-        case '{': 
-                parse_object(p);
-                return;
-        case '[':
-                parse_array(p);
-                return;
-        case 't':
-                parse_true(p);
-                return;
-        case 'f':
-                parse_false(p);
-                return;
-        case 'n':
-                parse_null(p);
-                return;
-        case '-':
-                parse_negative_number(p);
-                return;
-        case '0':
-                parse_zero_number(p, true);
-                return;
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9':
-                parse_number(p, true);
-                return;
-#ifdef JSONPG_FLAG_SINGLE_QUOTE_STRING
-        case '\'':
-                parse_squote_string(p, false);
-                return;
+        Bytes bytes;
+        size_t count;
+        int initial_level = nesting->level;
+        bool is_key = nesting->type == JSONPG_OBJECT;
+
+        do {
+                Byte b = input_peek(p);
+
+                if(is_key) {
+                        if(b == '"')
+                                count = parse_string(p, &bytes);
+#ifdef JSONPG_FLAG_SINGLE_QUOTE
+                        else if(b == '\'') {
+                                count = parse_squote_string(p, &bytes);
 #endif
-        default:
-#ifdef JSONPG_NO_QUOTE_STRING)
-                parse_nquote_string(p, false);
-                return;
+#ifdef JSONPG_FLAG_KEY_NO_QUOTE
+                        else
+                                count = parse_nquote_string(p, &bytes);
 #else
-        }
-        parse_error(p, UNEXPECTED);
+                        else
+                                parse_error(p, KEY);
+#endif
+                        output_key_bytes(p, bytes, count);
+                        consume_whitespace(p);
+                        if(input_consume(p, ':'))
+                                parse_error(p, COLON);
+                        consume_whitespace(p);
+
+                        is_key = false;
+                        b = input_peek(p);
+                }
+
+                switch(b) {
+                case '"':
+                        count = parse_string(p, &bytes);
+                        output_string_bytes(p, bytes, count);
+                        break;
+                case '{': 
+                        input_take(p);
+                        consume_whitespace(p);
+                        nesting = nesting_push(p, JSONPG_OBJECT);
+                        output_start_object(p);
+                        if(!input_consume(p, '}')) {
+                                consume_whitespace(p);
+                                is_key = true;
+                                continue;
+                        }
+                        output_end_object(p);
+                        nesting = nesting_pop(p);
+                        break;
+                case '[':
+                        input_take(p);
+                        consume_whitespace(p);
+                        nesting = nesting_push(p, JSONPG_ARRAY);
+                        output_start_array(p);
+                        if(!input_consume(p,']')) {
+                                consume_whitespace(p);
+                                continue;
+                        }
+                        output_end_array(p);
+                        nesting = nesting_pop(p);
+                        break;
+                case 't':
+                        parse_true(p);
+                        output_boolean(p, true);
+                        break;
+                case 'f':
+                        parse_false(p);
+                        output_boolean(p, false)
+                        break;
+                case 'n':
+                        parse_null(p);
+                        output_null(p);
+                        break;
+
+#ifdef JSONPG_FLAG_SINGLE_QUOTE
+                case '\'':
+                        count = parse_squote_string(p, &bytes);
+                        output_string_bytes(p, bytes, count);
+                        break;
+#endif
+#ifdef JSONPG_FLAG_TRAILING_COMMA
+                case '}':
+                        input_take(p);
+                        output_end_object(p);
+                        nesting = nesting_pop(p);
+                        break;
+                case ']':
+                        input_take(p);
+                        output_end_array(p);
+                        nesting = nesting_pop(p);
+                        break;
+#endif
+                default:
+                        if(b == '-' || ('0' <= b && b <= '9')) {
+                                double d;
+                                long l;
+                                if(parse_number(p, &d, &l))
+                                        output_real(p, d);
+                                else
+                                        output_integer(p, l)
+                                break;
+                        }
+
+#ifdef JSONPG_STRING_NO_QUOTE
+                        count = parse_nquote_string(p, &bytes);
+                        output_string_bytes(p, bytes, count);
+                        break;
+#else
+                        parse_error(p, UNEXPECTED);
+#endif
+                }
+
+                consume_whitespace(p);
+
+                if(nesting->type == JSONPG_OBJECT) {
+                        if(input_consume(p, '}')) {
+                                consume_whitespace(p);
+                                output_end_object(p);
+                                nesting = nesting_pop(p);
+                        }
+                } else if(nesting->type == JSONPG_ARRAY) {
+                        if(input_consume(p, ']')) {
+                                consume_whitespace(p);
+                                output_end_array(p);
+                                nesting = nesting_pop(p);
+                        }
+                }
+                if(nesting->level > initial->level) {
+                        if(input_consume(p, ',')) {
+                                consume_whitespace(p);
+                                is_key = nesting->type == JSONPG_OBJECT;
+                                continue;
+                        }
+#ifdef JSONPG_FLAG_OPTIONAL_COMMA
+                        is_key = nesting->type == JSONPG_OBJECT;
+                        continue;
+#endif
+                        parse_error(p, UNEXPECTED);
+                } 
+
+                return;
+
+        } while(!input_eof(p));
 }
+
+
+
 
 void parse_json(JsonpgParser p)
 {
+        Nesting nesting = nesting_new(p);
 
 #if defined(JSONPG_FLAG_IS_OBJECT)
-        unsigned element_count = 0;
-
-        begin_object(g);
+        nesting_push(p, JSONPG_OBJECT)
+        begin_object(p);
         do {
-                parse_member(p);
-                element_count++;
+                parse_value(p, nesting);
         } while(parse_comma(p));
-        end_object(g, element_count);
+        end_object(p, element_count);
+        nesting_pop(p);
 
 #elif defined(JSONPG_FLAG_IS_ARRAY)
-        unsigned element_count = 0;
-
-        begin_array(g);
+        nesting_push(p, JSONPG_ARRAY)
+        begin_array(p);
         do {
-                parse_element(p);
-                element_count++;
+                parse_value(p, nesting);
         } while(parse_comma(p));
-        end_array(g, element_count);
+        end_array(p, element_count);
+        nesting_pop(p);
         
 #else
-        parse_element(p);
+        parse_value(p, nesting);
 
 #endif
 
-#ifndef JSONPG_FLAG_TRAILING_CONTENT
+#ifndef JSONPG_FLAG_IGNORE_TRAILING_CONTENT
         if(!parse_eof(p))
-                parse_error(p, UNIDENTIFIED);
+                parse_error(p, UNEXPECTED);
 #endif
 
 }
         
-JpgParseResult parse(JpgByteStream is, JpgGenerator g)
+Parser parser_new(Bytes bytes, size_t count, Generator g)
 {
-        Parser p = parser_new(is, g);
+        Allocator a = allocator_new();
+        Parser p = allocator_alloc(sizeof(parser_s));
+        if(!p) {
+                allocator_free(a);
+                return NULL;
+        }
+        p->allocator = a;
+        p->is = mis_new(a, bytes, count);
+        p->g = g;
+
+        return p;
+}
+
+ParseResult parse(Bytes bytes, size_t count, Generator g)
+{
+        Parser p = parser_new(bytes, count, g);
         if(!p)
                 return NULL;
 
