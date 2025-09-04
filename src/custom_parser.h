@@ -289,7 +289,7 @@ static void parse_value(JpgParser p)
 #endif
 }
 
-ParseResult JSONPG_NAME(parse)(Bytes bytes, size_t count, void *ctx)
+ParseResult JSONPG_PARSE_NAME(Bytes bytes, size_t count, void *ctx)
 {
         Parser p = parser_new(bytes, count, ctx);
         if(!p)
