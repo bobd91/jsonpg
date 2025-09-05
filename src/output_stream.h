@@ -217,7 +217,7 @@ bool jos_puti(JsonOutputStream jos, long integer)
         Bytes s = mos_reserve(jos->mos, 20);
         if(!s)
                 return false;
-        size_t count = pg_ltoa(integer, s);
+        size_t count = i64toa(integer, s) - s;
         mos_adjust(jos->mos, 20 - count);
         return true;
 }
@@ -229,7 +229,7 @@ bool jos_putr(JsonOutputStream jos, double real)
         Bytes s = mos_reserve(jos->mos, 25);
         if(!s)
                 return false;
-        size_t count = pg_dtoa(real, s);
+        size_t count = dtoa(real, s, 0) - s;
         mos_adjust(jos->mos, 25 - count);
         return true;
 }
@@ -251,6 +251,13 @@ bool jos_indent(JsonOutputStream jos)
         }
 #endif
         return true;
+}
+
+bool jos_indent_end(JsonOutputStream jos)
+{
+
+        // TODO: printing end of block 
+        //       
 }
 
 bool print_null(JsonOutputStream jos)

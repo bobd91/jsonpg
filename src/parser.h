@@ -225,7 +225,7 @@ void consume_whitespace(Parser p)
 #endif
 }
 
-void parse_string_to_cow(JpgParser p, CowStream cs)
+void parse_string_to_cow(JpgParser p, CowStream cs, Byte terminator)
 {
         JSONPG_ASSERT(p);
         JSONPG_ASSERT(cs);
@@ -242,8 +242,8 @@ void parse_string_to_cow(JpgParser p, CowStream cs)
                         int count = utf8_encode(codepoint, s);
                         if(count == -1)
                                 parse_error(p, UTF8);
-                        cow_advance(cs, count);
-                } else if(c == '"') {
+                        cow_adjust(cs, 4 - count);
+                } else if(c == terminator) {
                         if(!cow_finalize(cs))
                                 parse_error(p, MEMORY);
                         input_take(p);
@@ -259,10 +259,10 @@ void parse_string_to_cow(JpgParser p, CowStream cs)
         }
 }
 
-size_t parse_string(JpgParser p, Bytes *bytes)
+size_t parse_string(JpgParser p, Bytes *bytes, byte terminator)
 {
         JSONPG_ASSERT(p);
-        JSONPG_ASSERT(input_peek(p) == '"');
+        JSONPG_ASSERT(input_peek(p) == terminator);
 
         input_take(p); // "
 
@@ -270,7 +270,7 @@ size_t parse_string(JpgParser p, Bytes *bytes)
         if(!cs)
                 return 0;
 
-        parse_string_to_cow(p, cs);
+        parse_string_to_cow(p, cs, terminator);
         size_t length = cow_length(cs);
         Bytes str = cow_pop(cs);
         *bytes = str;
@@ -425,7 +425,7 @@ static bool parse_number(JsgParser p, *double real, *long integer)
         }
 
         if(force_double || overflow) {
-                *real = sign * strtod((double)sum, exponent);
+                *real = sign * strtod_normal((double)sum, exponent);
                 return true;
         } else {
                 *integer = sign * sum;

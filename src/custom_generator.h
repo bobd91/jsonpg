@@ -47,6 +47,7 @@
 #define JSONPG_GENERATOR_PRETTY jsonpg_pretty_
 #define JSONPG_GENERATOR_DOM    jsonpg_dom_
 
+
 #ifndef JSONPG_GENERATOR
 #define JSONPG_GENERATOR        JSONPG_GENERATOR_PRINT
 #endif
@@ -58,6 +59,7 @@
 #ifndef JSONPG_CONTEXT_NAME
 #define JSONPG_CONTEXT_NAME     JSONPG_NAME(ctx)
 #endif
+
 
 #if JSONPG_EMPTY(JSONPG_HANDLER_BOOLEAN) == 0
 void JSONPG_HANDLER_BOOLEAN(void *ctx, bool is_true)

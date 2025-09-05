@@ -64,7 +64,7 @@ bool print_integer(PrintContext ctx, long integer)
                 && jos_put(os, ',');
 }
 
-bool print_double(PrintContext ctx, double real)
+bool print_real(PrintContext ctx, double real)
 {
         JsonOutputStream os = ctx->os;
         return print_indent(ctx, os)

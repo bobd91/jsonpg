@@ -18,11 +18,11 @@ Bytes cow_pop(CowStream cs)
                 : input_at(cs->is, cs->ptr);
 }
 
-void cow_advance(CowStream cs, size_t count)
+void cow_adjust(CowStream cs, size_t amount)
 {
         JSONPG_ASSERT(cs);
 
-        mos_advance(cs->os, count);
+        mos_adjust(cs->os, amount);
         cs->is_ptr = input_tell(cs->is);
 }
 
@@ -39,7 +39,6 @@ Bytes cow_reserve(CowStream cs, size_t count)
                 return NULL;
 
         memcpy(s, input_at(cs->is, cs->is_ptr), to_copy);
-        mos_advance(os, to_copy);
         return s;
 }
 
