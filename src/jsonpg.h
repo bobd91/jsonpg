@@ -24,9 +24,9 @@ typedef enum {
         JSONPG_REAL,
         JSONPG_STRING,
         JSONPG_KEY,
-        JSONPG_BEGIN_ARRAY,
+        JSONPG_START_ARRAY,
         JSONPG_END_ARRAY,
-        JSONPG_BEGIN_OBJECT,
+        JSONPG_START_OBJECT,
         JSONPG_END_OBJECT,
         JSONPG_ERROR,
         JSONPG_EOF
@@ -51,8 +51,8 @@ typedef enum {
 } jsonpg_error_code;
 
 typedef struct {
-        uint8_t *bytes;
-        size_t length;
+        Bytes *bytes;
+        size_t count;
 } jsonpg_string_value;
 
 typedef union {
@@ -103,59 +103,17 @@ typedef struct {
         uint16_t flags;          // mask of JSONPG_FLAG_... values above
 } jsonpg_parser_opts;
 
+// ------------------------------------
+// Pull Parsing
+// ------------------------------------
+
+// Create a parser for pull parsing
+// Not needed for callback or dom parsing as jsonpg_parse
+// creates one internally and frees it before returning
 jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts);
 #define jsonpg_parser_new(...)   jsonpg_parser_new_opt(     \
                 (jsonpg_parser_opts){ .max_nesting = 1024,  \
-                                       __VA_ARGS__ })           
-
-// Example: create a parser that will permit comments and trailing commas
-// jsonpg_parser_new(.flags = JSONPG_FLAG_COMMENTS 
-//                              | JSONPG_FLAG_TRAILING_COMMAS);
-
-typedef struct {
-        // Optional parser, required for pull parsing
-        jsonpg_parser parser;
-
-        // If no parser is supplied then one will be created using these options
-        // The parser will be freed before returning
-        // See parser_opts above for desriptions
-        uint16_t max_nesting;
-        uint16_t flags;      
-
-        // Input options, specify one type only
-        //
-        // All input is JSON bytes except for the 'dom' option
-        // which is an in-memeory representation of parsed JSON
-        // created by jsonpg_generator_new(.dom = true, ...)
-        uint8_t *bytes;         // input bytes, must set count
-        size_t count;
-        char *string;           // NULL terminated C string
-        jsonpg_dom dom;
-
-        // Optional callbacks and callback ctx for SAX style parsing
-        // This is a common use case so providing the options here
-        // saves the caller having to create and free a generator themselves
-        // Ignored if a parser option is specified
-        jsonpg_callbacks *callbacks;
-        void *ctx;
-
-        // Optional generator
-        // Ignored if callbacks/ctx or parser options are specified
-        jsonpg_generator generator;
-
-} jsonpg_parse_opts;
-
-jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts);
-#define jsonpg_parse(...)  jsonpg_parse_opt(              \
-                (jsonpg_parse_opts){ .max_nesting = 1024, \
-                                     __VA_ARGS__ })         
-
-// Example, parse a byte buffer and call callbacks with context
-// jsonpg_parse(.bytes = my_bytes, 
-//              .count = my_byte_count, 
-//              .callbacks = my_fns,
-//              .ctx = my_context);
-
+                                       __VA_ARGS__ })     
 
 
 // Pull parser, get next parse event and result
@@ -183,6 +141,62 @@ jsonpg_value jsonpg_parse_result(jsonpg_parser);
 // jsonpg_parser_free(p);
 //
 
+// Example: create a parser that will permit comments and trailing commas
+// jsonpg_parser_new(.flags = JSONPG_FLAG_COMMENTS 
+//                              | JSONPG_FLAG_TRAILING_COMMAS);
+
+// Free the parser returned from jsonpg_parser_new
+void jsonpg_parser_free(void *);
+
+// ------------------------------------
+// Callback and DOM parsing
+// ------------------------------------
+
+typedef struct {
+        // Options for parser created internally by json_parse
+        // The parser will be freed before returning
+        // See parser_opts above for desriptions
+        uint16_t max_nesting;
+        uint16_t flags;      
+
+        // Input options, specify one type only
+        //
+        // All input is JSON bytes except for the 'dom' option
+        // which is an in-memeory representation of parsed JSON
+        // created by jsonpg_generator_new(.dom = true, ...)
+        uint8_t *bytes;         // input bytes, must set count
+        size_t count;
+        char *string;           // NULL terminated C string
+        jsonpg_dom dom;
+
+        // Optional callbacks and callback ctx for SAX style parsing
+        // This is a common use case so providing the options here
+        // saves the caller having to create and free a generator themselves
+        jsonpg_callbacks *callbacks;
+        void *ctx;
+
+        // Optional generator
+        // Ignored if callbacks/ctx are specified
+        jsonpg_generator generator;
+
+} jsonpg_parse_opts;
+
+jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts);
+#define jsonpg_parse(...)  jsonpg_parse_opt(              \
+                (jsonpg_parse_opts){ .max_nesting = 1024, \
+                                     __VA_ARGS__ })         
+
+// Example, parse a byte buffer and call callbacks with context
+// jsonpg_parse(.bytes = my_bytes, 
+//              .count = my_byte_count, 
+//              .callbacks = my_callbacks,
+//              .ctx = my_context);
+
+
+// ------------------------------------
+// Generating output
+// ------------------------------------
+
 typedef struct {
         // Pretty printing is ignored when writing to DOM or callbacks
         int indent;             // pretty printing indent, 0 = stringify
@@ -193,19 +207,22 @@ typedef struct {
         // or jsonpg_result_bytes
         // Options 'dom' build an in-memory representation of the parse
         // results which is available via jsonpg_result_dom
-        // [Not much can be done with dom at the moment apart from
-        //  providing it as an input to parse]
+        //
+        // Note: not much can be done with dom at the moment apart from
+        //       providing it as an input to parse
         bool dom;
+
+        // TODO: do we need callbacks in generators?
         jsonpg_callbacks *callbacks;
         void *ctx;
 
-        // Validation of JSON format, the correct nesting of arrays/objects
-        // And the correct positioning of keys requires the nesting of
-        // these items to be tracked
-        // Set this option to +ive to enable tracking
-        // If 0 < max_nesting < 1024 the value will be set to 1024, more than enough 
-        // for most use cases
-        // Validation of numerics and UTF8 sequences cannot be disabled
+        // The structure of generated JSON is validated via the C assert
+        // mechanism so is active during development and testing but
+        // can will be removed when NDEBUG is defined.
+        // While validating the correct nesting of arrays and objects
+        // jsonpg needs to know the maximum nesting level to support
+        // It will default to 1024 which if more than enough for most use cases
+        // The setting has no effect in producion builds
         size_t max_nesting;
 
 } jsonpg_generator_opts;
@@ -222,7 +239,6 @@ jsonpg_dom jsonpg_result_dom(jsonpg_generator);
 char *jsonpg_result_string(jsonpg_generator);
 size_t jsonpg_result_bytes(jsonpg_generator, uint8_t **);
 
-void jsonpg_parser_free(jsonpg_parser);
 void jsonpg_generator_free(jsonpg_generator);
 
 // Write JSON items to a generator

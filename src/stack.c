@@ -15,7 +15,7 @@ static int peek_stack_bytes(stack s)
 
 static int pop_stack_bytes(stack s)
 {
-        if(s->ptr == s->ptr_min)
+        if(s->ptr == 0)
                 return -1;
         --s->ptr;
 
@@ -46,7 +46,7 @@ static int peek_stack(stack s)
 
 static int pop_stack(stack s) 
 {
-        if(s->ptr == s->ptr_min)
+        if(s->ptr == 0)
                 return -1;
         --s->ptr;
 

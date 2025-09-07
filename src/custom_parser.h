@@ -1,399 +1,300 @@
 /*
- * See include/jsonpg/LICENSE
+ * See LICENSE
  */
 
-/*
- * To create a custom jsonpg parser with associated handler functions
- * create a new .c file
- *
- * Define any of the following macros:
- *
- * JSONPG_PARSE_NAME                    The name to give the generated parse function
- *                                      (default: parse)
- *
- * JSONPG_PARSE_STATIC                  If defined the parse function will be static
- *
- * JSONPG_HANDLE_<type>                 See // comment section below on how to determine
- *                                      which handler functions will be called
- *                                      and what their names should be
- *
- * Parse options can be specified by defining the following macros
- * 
- * JSONPG_OPTION_COMMENTS               Treat C style comments as whitespace
- * JSONPG_OPTION_TRAILING_COMMA         Allow a trailing comma in arrays/objects
- *                                      [1,2,3,] or {"key": value,}
- * JSONPG_OPTION_OPTIONAL_COMMA         Whitespace can be used instead of commas in arrays/objects
- *                                      [1 2 3] or {"k1":v1 "k2":v2}
- * JSONPG_OPTION_SINGLE_QUOTE           Keys and strings can be enclosed in single quotes
- * JSONPG_OPTION_KEY_NO_QUOTE           Keys can be provided without quotes, terminated with a space
- * JSONPG_OPTION_STRING_NO_QUOTE        Strings can be provided without quotes, terminated with a space
- *                                      Note: escapes are handled differently in unquoted keys/strings
- *                                      Any characters can be escaped by prefixing with \
- *                                      For example: \null will be parsed as "null" rather than "\null"
- * JSONPG_OPTION_IGNORE_TRAILING        Parsing terminates immediately after a successful parse
- *                                      Additonal characters in the input are ignored
- *                              
- * Then include this file
- * #include <jsonpg/custom_parser.h>
- *
- * Provide implementations of your chosen handler functions
- * Your handler funcions can be statically defined within your parser file
- * or externally defined elsewhere
- *
- *
- * To parse JSON, load the string into a buffer and call parse.
- *
- * With event based parsing you often need an object to hold context
- * information to tie multiple events together.  
- * For example you could track the key value of the latest key event
- * so the next value event can determine which key it applies to.
- * To facilitate this, any object you pass as the final argument to the 
- * parse function will be passed as the first argument to each handler function.
- *
- * JsonpgParseResult result = parse(json_buffer, no_of_bytes_buffer, parser_context);
- *
- * result->type == JSONPG_EOF or JSONPG_ERROR
- * if JSONPG_ERROR
- * result->type.error.code   see include/jsonpg/error.h for error values
- * result->type.error.at     position in the input where the error occurred
- */
-
-// Copy this comment section into your parser file above the
-// #include <jsonpg/custom_parser.h> line
+// Copy this comment section into your parser file before including this file
 //
-// For each parse event you wish to handle
-// uncomment and optionally change the name of the handler function name
+// Set the prefix that will be added to each generated function
+// Helps to avoid name conflicts in unity type builds
+//
+// #define PARSER_PREFIX    my_prefix_
+//
+// For each parse event you wish to callbacks
+// uncomment and optionally change the name of the callbacksr function name
 //
 // The required function signatures are given above each define
 // The first argument to each is the value given as the final argument to the parse function
 // Functions should return true to continue parsing, false to terminate
 //
-// bool <handler>(void *, bool)
-// #define JSONPG_HANDLE_BOOLEAN                        handle_boolean
+// bool <callbacksr>(void *, bool)
+// #define callbacks.BOOLEAN                        handle_boolean
 //
-// bool <handler>(void *)
-// #define JSONPG_HANDLE_NULL                           handle_null
+// bool <callbacksr>(void *)
+// #define callbacks.NULL                           handle_null
 //
-// bool <handler>(void *, long)
-// #define JSONPG_HANDLE_INTEGER                        handle_integer
+// bool <callbacksr>(void *, long)
+// #define callbacks.INTEGER                        handle_integer
 //
-// bool <handler>(void *, double)
-// #define JSONPG_HANDLE_REAL                           handle_real
+// bool <callbacksr>(void *, double)
+// #define callbacks.REAL                           handle_real
 //
-// bool <handler>(void *, unsigned char *, size_t)
-// #define JSONPG_HANDLE_STRING                         handle_string
+// bool <callbacksr>(void *, unsigned char *, size_t)
+// #define callbacks.STRING                         handle_string
 //
-// bool <handler>(void *, unsigned char *, size_t)
-// #define JSONPG_HANDLE_KEY                            handle_key
+// bool <callbacksr>(void *, unsigned char *, size_t)
+// #define callbacks.KEY                            handle_key
 //
-// bool <handler>(void *)
-// #define JSONPG_HANDLE_START_OBJECT                   handle_start_object
+// bool <callbacksr>(void *)
+// #define callbacks.START_OBJECT                   handle_start_object
 //
-// bool <handler>(void *)
-// #define JSONPG_HANDLE_END_OBJECT                     handle_end_object
+// bool <callbacksr>(void *)
+// #define callbacks.END_OBJECT                     handle_end_object
 //
-// bool <handler>(void *)
-// #define JSONPG_HANDLE_START_ARRAY                    handle_start_array
+// bool <callbacksr>(void *)
+// #define callbacks.START_ARRAY                    handle_start_array
 //
-// bool <handler>(void *)
-// #define JSONPG_HANDLE_END_ARRAY                      handle_end_array
+// bool <callbacksr>(void *)
+// #define callbacks.END_ARRAY                      handle_end_array
 
-#include <jsonpg/parse.h>
+#define PARSER_NAME(X)   PREFIX_NAME_(X)
+#define PARSER_NAME_(X)  PARSER_PREFIX##X
 
-#ifndef JSONPG_PARSE_NAME
-#define JSONPG_PARSE_NAME       parse
-#endif
-
-#ifndef JSONPG_PARSE_STATIC
-#define JSONPG_PARSE_STATIC     
-#else
-#undef JSONPG_PARSE_STATIC
-#define JSONPG_PARSE_STATIC     static
-#endif
-
-static inline void jsonpg_handle_boolean(JsonpgParser p, bool is_true)
+static inline void PREFIX_NAME(boolean)(Parser p, bool is_true)
 {
-#ifdef JSONPG_HANDLE_BOOLEAN
-        if(!JSONPG_HANDLE_BOOLEAN(p->ctx, is_true))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.BOOLEAN
+        if(!callbacks.BOOLEAN(p->ctx, is_true))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_null(JsonpgParser p)
+static inline void PREFIX_NAME(null)(Parser p)
 {
-#ifdef JSONPG_HANDLE_NULL
-        if(!JSONPG_HANDLE_NULL(p->ctx))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.NULL
+        if(!callbacks.NULL(p->ctx))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_integer(JsonpgParser p, long integer)
+static inline void PREFIX_NAME(integer)(Parser p, long integer)
 {
-#ifdef JSONPG_HANDLE_INTEGER
-        if(!JSONPG_HANDLE_INTEGER(p->ctx, integer))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.INTEGER
+        if(!callbacks.INTEGER(p->ctx, integer))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_real(JsonpgParser p, double real)
+static inline void PREFIX_NAME(real)(Parser p, double real)
 {
-#ifdef JSONPG_HANDLE_REAL
-        if(!JSONPG_HANDLE_REAL(p->ctx, real))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.REAL
+        if(!callbacks.REAL(p->ctx, real))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_string(JsonpgParser p, unsigned char *string, size_t count)
+static inline void PREFIX_NAME(string)(Parser p, unsigned char *string, size_t count)
 {
-#ifdef JSONPG_HANDLE_STRING
-        if(!JSONPG_HANDLE_STRING(p->ctx, string, count))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.STRING
+        if(!callbacks.STRING(p->ctx, string, count))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_key(JsonpgParser p, unsigned char *key, size_t count)
+static inline void PREFIX_NAME(key)(Parser p, unsigned char *key, size_t count)
 {
-#ifdef JSONPG_HANDLE_KEY
-        if(!JSONPG_HANDLE_KEY(p->ctx, key, count))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.KEY
+        if(!callbacks.KEY(p->ctx, key, count))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_start_object(JsonpgParser p)
+static inline void PREFIX_NAME(start_object)(Parser p)
 {
-#ifdef JSONPG_HANDLE_START_OBJECT
-        if(!JSONPG_HANDLE_START_OBJECT(p->ctx))
-                jsonpg_parse_error(p, TERMINATED)
+#ifdef callbacks.START_OBJECT
+        if(!callbacks.START_OBJECT(p->ctx))
+                parse_error(p, TERMINATED)
 #endif
 }
 
-static inline void jsonpg_handle_end_object(JsonpgParser p)
+static inline void PREFIX_NAME(end_object)(Parser p)
 {
-#ifdef JSONPG_HANDLE_END_OBJECT
-        if(!JSONPG_HANDLE_END_OBJECT(p->ctx))
-                jsonpg_parse_error(p, TERMINATED)
+#ifdef callbacks.END_OBJECT
+        if(!callbacks.END_OBJECT(p->ctx))
+                parse_error(p, TERMINATED)
 #endif
 }
 
-static inline void jsonpg_handle_start_array(JsonpgParser p)
+static inline void PREFIX_NAME(start_array)(Parser p)
 {
-#ifdef JSONPG_HANDLE_START_ARRAY
-        if(!JSONPG_HANDLE_START_ARRAY(p->ctx))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.START_ARRAY
+        if(!callbacks.START_ARRAY(p->ctx))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_handle_end_array(JsonpgParser p)
+static inline void PREFIX_NAME(end_array)(Parser p)
 {
-#ifdef JSONPG_HANDLE_END_ARRAY
-        if(!JSONPG_HANDLE_END_ARRAY(p->ctx))
-                jsonpg_parse_error(p, TERMINATED);
+#ifdef callbacks.END_ARRAY
+        if(!callbacks.END_ARRAY(p->ctx))
+                parse_error(p, TERMINATED);
 #endif
 }
 
-static inline void jsonpg_consume_whitespace(JsonpgParser p)
+void parse(Parser p)
 {
-#ifdef JSONPG_OPTION_COMMENTS
-        jsonpg_consume_whitespace_comments(p);
-#else
-        jsonpg_consume_whitespace_only(p);
-#endif
-}
+        const int flags = p->flags;
+        const bool opt_comment = flags & JSONPG_FLAG_COMMENT
+        const bool opt_single_quote = flags & JSONPG_FLAG_SINGLE_QUOTE;
+        const bool opt_key_no_quote = flags & JSONPG_FLAG_KEY_NO_QUOTE;
+        const bool opt_string_no_quote = flags & JSONPG_FLAG_STRING_NO_QUOTE;
+        const bool opt_trailing_comma = flags & JSONPG_FLAG_TRAILING_COMMA;
+        const bool opt_optional_comma = flags & JSONPG_FLAG_OPTIONAL_COMMA;
+        const bool opt_ignore_trailing = flags & JSONPG_FLAG_IGNORE_TRAILING;
 
-static void jsonpg_parse_value(JsonpgParser p)
-{
+        const Callbacks callbacks = p->callbacks;
+
         unsigned char *bytes;
         size_t count;
-        bool is_key = false;;
+        bool is_key = false;
 
         do {
-                unsigned char b = jsonpg_parser_peek(p);
+                Byte b = parser_peek(p);
 
                 if(is_key) {
                         if(b == '"')
-                                count = jsonpg_parse_string(p, &bytes);
+                                count = parse_string(p, &bytes);
+                        else if(opt_single quote && b == '\'') {
+                                count = parse_sqstring(p, &bytes);
+                        else if(opt_key_no_quote)
+                                count = parse_nqstring(p, &bytes);
+                        else
+                                parse_error(p, KEY);
 
-#ifdef JSONPG_OPTION_SINGLE_QUOTE
-                        else if(b == '\'') {
-                                count = jsonpg_parse_sqstring(p, &bytes);
-#endif
-#ifdef JSONPG_OPTION_KEY_NO_QUOTE
-                        else
-                                count = jsonpg_parse_nqstring(p, &bytes);
-#else
-                        else
-                                jsonpg_parse_error(p, KEY);
-#endif
-                        jsonpg_handle_key(p, bytes, count);
+                        callbacks.key(p, bytes, count);
                         
-                        jsonpg_consume_whitespace(p);
-                        if(jsonpg_parser_consume(p, ':'))
-                                jsonpg_parse_error(p, COLON);
-                        jsonpg_consume_whitespace(p);
+                        parser_consume_whitespace(p, opt_comment);
+                        if(parser_consume(p, ':'))
+                                parse_error(p, COLON);
+                        parser_consume_whitespace(p, opt_comment);
                         
                         is_key = false;
-                        b = jsonpg_parser_peek(p);
+                        b = parser_peek(p);
                 }
 
                 switch(b) {
                 case '"':
-                        count = jsonpg_parse_string(p, &bytes);
-                        jsonpg_handle_string(p, bytes, count);
+                        count = parse_string(p, &bytes);
+                        callbacks.string(p, bytes, count);
                         break;
 
                 case '{': 
-                        jsonpg_parse_start_object(p);
-                        jsonpg_handle_start_object(p);
+                        parse_start_object(p);
+                        callbacks.start_object(p);
 
-                        jsonpg_consume_whitespace(p);
-                        if(jsonpg_parser_peek(p, '}')) {
-                                jsonpg_parse_end_object(p);
-                                jsonpg_handle_end_object();
+                        parser_consume_whitespace(p, opt_comment);
+                        if(parser_peek(p, '}')) {
+                                parse_end_object(p);
+                                callbacks.end_object();
                                 break;
                         }
 
-                        jsonpg_consume_whitespace(p);
                         is_key = true;
                         continue;
 
                 case '[':
-                        jsonpg_parse_start_array(p);
-                        jsonpg_handle_start_array(p);
+                        parse_start_array(p);
+                        callbacks.start_array(p);
 
-                        jsonpg_consume_whitespace(p);
-                        if(jsonpg_parser_peek(p, ']')) {
-                                jsonpg_parse_end_array(p);
-                                jsonpg_handle_end_array(p);
+                        parser_consume_whitespace(p, opt_comment);
+                        if(parser_peek(p, ']')) {
+                                parse_end_array(p);
+                                callbacks.end_array(p);
                                 break;
                         }
 
-                        jsonpg_consume_whitespace(p);
                         continue;
 
                 case 't':
-                        jsonpg_parse_true(p);
-                        jsonpg_handle_boolean(p, true);
+                        parse_true(p);
+                        callbacks.boolean(p, true);
                         break;
 
                 case 'f':
-                        jsonpg_parse_false(p);
-                        jsonpg_handle_boolean(p, false)
+                        parse_false(p);
+                        callbacks.boolean(p, false)
                         break;
 
                 case 'n':
-                        jsonpg_parse_null(p);
-                        jsonpg_handle_null(p);
+                        parse_null(p);
+                        callbacks.null(p);
                         break;
 
-#ifdef JSONPG_OPTION_SINGLE_QUOTE
                 case '\'':
-                        count = jsonpg_parse_sqstring(p, &bytes);
-                        jsonpg_handle_string(p, bytes, count);
+                        if(!opt_single_quote)
+                                parse_error(p, UNEXPECTED);
+
+                        count = parse_sqstring(p, &bytes);
+                        callbacks.string(p, bytes, count);
                         break;
-#endif
-#ifdef JSONPG_OPTION_TRAILING_COMMA
+
                 case '}':
-                        jsonpg_parse_end_object(p);
-                        jsonpg_handle_end_object(p);
+                        if(!opt_trailing_comma)
+                                parse_error(p, UNEXPECTED);
+
+                        parse_end_object(p);
+                        callbacks.end_object(p);
                         break;
 
                 case ']':
-                        jsonpg_parse_end_array(p);
-                        jsonpg_handle_end_array(p);
+                        if(!opt_trailing_comma)
+                                parse_error(p, UNEXPECTED);
+
+                        parse_end_array(p);
+                        callbacks.end_array(p);
                         break;
-#endif
+
                 default:
                         if(b == '-' || ('0' <= b && b <= '9')) {
                                 double d;
                                 long l;
-                                if(JSONPG_REAL == jsonpg_parse_number(p, &d, &l))
-                                        jsonpg_handle_real(p, d);
+                                if(JSONPG_REAL == parse_number(p, &d, &l))
+                                        callbacks.real(p, d);
                                 else
-                                        jsonpg_handle_integer(p, l)
+                                        callbacks.integer(p, l)
                                 break;
                         }
 
-#ifdef JSONPG_STRING_NO_QUOTE
-                        count = jsonpg_parse_nqstring(p, &bytes);
-                        jsonpg_handle_string(p, bytes, count);
+                        if(!opt_string_no_quote)
+                                parse_error(p, UNEXPECTED);
+
+                        count = parse_nqstring(p, &bytes);
+                        callbacks.string(p, bytes, count);
                         break;
-#else
-                        jsonpg_parse_error(p, UNEXPECTED);
-#endif
                 }
 
-                jsonpg_consume_whitespace(p);
+                parser_consume_whitespace(p, opt_comment);
 
-                if(jsonpg_parser_in_object(p)) {
-                        if(jsonpg_parser_peek(p, '}')) {
-                                jsonpg_parse_end_object(p);
-                                jsonpg_handle_end_object(p);
-                                jsonpg_consume_whitespace(p);
+                if(parser_in_object(p)) {
+                        if(parser_peek(p, '}')) {
+                                parse_end_object(p);
+                                callbacks.end_object(p);
+                                parser_consume_whitespace(p, opt_comment);
                         }
-                } else if(jsonpg_parser_in_array(p)) {
-                        if(jsonpg_parser_peek(p, ']')) {
-                                jsonpg_parse_end_array(p);
-                                jsonpg_handle_end_array(p);
-                                jsonpg_consume_whitespace(p);
+                } else if(parser_in_array(p)) {
+                        if(parser_peek(p, ']')) {
+                                parse_end_array(p);
+                                callbacks.end_array(p);
+                                parser_consume_whitespace(p, opt_comment);
                         }
                 }
-                if(jsonpg_parser_in_any(p)) {
-                        if(jsonpg_parser_consume(p, ',')) {
-                                jsonpg_consume_whitespace(p);
-                                is_key = jsonpg_parser_in_object(p);
+                if(parser_in_any(p)) {
+                        if(parser_consume(p, ',')) {
+                                parser_consume_whitespace(p, opt_comment);
+                                is_key = parser_in_object(p);
                                 continue;
                         }
 
-#ifdef JSONPG_OPTION_OPTIONAL_COMMA
-                        is_key = jsonpg_parser_in_object(p);
+                        if(!opt_optional_comma)
+                                parse_error(p, UNEXPECTED);
+
+                        is_key = parser_in_object(p);
                         continue;
-#endif
-                        jsonpg_parse_error(p, UNEXPECTED);
                 } 
                 break;
-        } while(!jsonpg_parser_eof(p));
+        } while(!parser_eof(p));
+
+        if(!opt_ignore_trailing) {
+                parser_consume_whitespace(p, opt_comment);
+                if(!parser_eof(p))
+                        parse_error(p, UNEXPECTED);
+        }
 }
-
-static void jsonpg_parse_json(JsonpgParser p)
-{
-        jsonpg_parse_value(p);
-
-#ifndef JSONPG_OPTION_IGNORE_TRAILING
-        jsonpg_consume_whitespace(p);
-        if(!jsonpg_parser_eof(p))
-                jsonpg_parse_error(p, UNEXPECTED);
-#endif
-}
-
-
-JSONPG_PARSE_STATIC JsonpgParseResult JSONPG_PARSE_NAME(
-                unsigned char *bytes, 
-                size_t count, 
-                void *ctx)
-{
-        JsonpgParser p = jsonpg_parser_new(bytes, count, ctx);
-        if(!p)
-                return NULL;
-
-        if(0 == setjmp(p->env))
-                jsonpg_parse_json(p);
-
-        JsonpgParseResult result = p->result;
-        jsonpg_parser_free(p);
-
-        return result;
-}
-
-#undef JSONPG_PARSE_NAME
-#undef JSONPG_PARSE_EXTERN
-#undef JSONPG_PARSE_STATIC
-#undef JSONPG_HANDLE_BOOLEAN
-#undef JSONPG_HANDLE_NULL
-#undef JSONPG_HANDLE_INTEGER
-#undef JSONPG_HANDLE_REAL
-#undef JSONPG_HANDLE_STRING
-#undef JSONPG_HANDLE_KEY
-#undef JSONPG_HANDLE_START_OBJECT
-#undef JSONPG_HANDLE_END_OBJECT
-#undef JSONPG_HANDLE_START_ARRAY
-#undef JSONPG_HANDLE_END_ARRAY

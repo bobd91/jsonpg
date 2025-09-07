@@ -3,123 +3,6 @@
 
 #define MIN_STACK_SIZE 1024
 
-#define TOKEN_INFO_DEFAULT      0x00
-#define TOKEN_INFO_IS_STRING    0x01
-#define TOKEN_INFO_HAS_QUOTE    0x03 // implies _IS_STRING
-#define TOKEN_INFO_IS_ESCAPE    0x04
-#define TOKEN_INFO_IS_SURROGATE 0x08
-#define TOKEN_INFO_COPY_FORWARD 0x10
-
-#define write_b(X, Y)   (str_buf_append(p->write_buf, (X), (Y)))
-#define write_c(X)      (str_buf_append_c(p->write_buf, (X)))
-#define get_content(X)  (str_buf_content(p->write_buf, (X)))
-
-
-// must be same size and order as token_type
-static int token_type_info[] = {
-        TOKEN_INFO_DEFAULT,
-        TOKEN_INFO_DEFAULT,
-        TOKEN_INFO_DEFAULT,
-        TOKEN_INFO_HAS_QUOTE,
-        TOKEN_INFO_HAS_QUOTE,
-        TOKEN_INFO_HAS_QUOTE,
-        TOKEN_INFO_HAS_QUOTE,
-        TOKEN_INFO_IS_STRING,
-        TOKEN_INFO_IS_STRING,
-        TOKEN_INFO_COPY_FORWARD,
-        TOKEN_INFO_COPY_FORWARD,
-        TOKEN_INFO_IS_ESCAPE,
-        TOKEN_INFO_IS_ESCAPE,
-        TOKEN_INFO_IS_ESCAPE | TOKEN_INFO_COPY_FORWARD,
-        TOKEN_INFO_IS_SURROGATE | TOKEN_INFO_COPY_FORWARD
-};
-
-static int push_token(jsonpg_parser p, token_type type)
-{
-        assert(p->token_ptr < TOKEN_MAX && "Token stack overflow");
-
-        token t = &p->tokens[p->token_ptr++];
-        t->type = type;
-        t->pos = p->current;
-
-        if(token_type_info[type] & TOKEN_INFO_HAS_QUOTE ) {
-                // Quoted string/key starts after quote
-                t->pos++;
-        } else if(token_type_info[type] & TOKEN_INFO_IS_ESCAPE) {
-                // Copy previous bytes from enclosing string
-                assert(p->token_ptr > 1 && "Push escape token with no enclosing string");
-
-                token et = &p->tokens[p->token_ptr - 2];
-                assert((token_type_info[et->type] & TOKEN_INFO_IS_STRING)
-                                && "Push escape token with no enclosing string");
-                uint8_t *start = et->pos;
-                if(write_b(start, p->current - start))
-                        return -1;
-
-                // Escape starts after "\"
-                t->pos++;
-        }
-        return 0;
-}
-
-static token pop_token(jsonpg_parser p)
-{
-        assert(p->token_ptr > 0 && "Token stack underflow");
-        
-        return &p->tokens[--p->token_ptr];
-}
-static jsonpg_type begin_object(jsonpg_parser p)
-{
-        return(0 == push_stack(&p->stack, STACK_OBJECT))
-                ? JSONPG_BEGIN_OBJECT
-                : set_result_error(p, JSONPG_ERROR_STACK_OVERFLOW);
-}
-
-static jsonpg_type end_object(jsonpg_parser p)
-{
-        return (0 == pop_stack(&p->stack))
-                ? JSONPG_END_OBJECT
-                : set_result_error(p, JSONPG_ERROR_STACK_UNDERFLOW);
-}
-
-static jsonpg_type begin_array(jsonpg_parser p)
-{
-        return(0 == push_stack(&p->stack, STACK_ARRAY))
-                ? JSONPG_BEGIN_ARRAY
-                : set_result_error(p, JSONPG_ERROR_STACK_OVERFLOW);
-}
-
-static jsonpg_type end_array(jsonpg_parser p)
-{
-        return (0 == pop_stack(&p->stack))
-                ? JSONPG_END_ARRAY
-                : set_result_error(p, JSONPG_ERROR_STACK_UNDERFLOW);
-}
-
-static jsonpg_type accept_integer(jsonpg_parser p, token t)
-{
-        errno = 0;
-        long integer = strtol((char *)t->pos, NULL, 10);
-        if(errno) 
-                return number_error(p);
-        p->result.number.integer = integer;
-        return JSONPG_INTEGER;
-}
-
-static jsonpg_type accept_real(jsonpg_parser p, token t)
-{
-        errno = 0;
-        double real = strtod((char *)t->pos, NULL);
-        if(errno) 
-                return number_error(p);
-
-        if(!(real == 0 || isnormal(real))) 
-                return number_error(p);
-
-        p->result.number.real = real;
-        return JSONPG_REAL;
-}
-
 static int set_string_value(jsonpg_parser p, token t)
 {
         if(p->write_buf->count) {
@@ -131,85 +14,6 @@ static int set_string_value(jsonpg_parser p, token t)
                 p->result.string.bytes = t->pos;
                 p->result.string.length = p->current - t->pos;
         }
-        return 0;
-}
-
-static jsonpg_type accept_string(jsonpg_parser p, token t)
-{
-        if(set_string_value(p, t))
-                return alloc_error(p);
-        return JSONPG_STRING;
-}
-
-static jsonpg_type accept_key(jsonpg_parser p, token t)
-{
-        if(set_string_value(p, t))
-                return alloc_error(p);
-        return JSONPG_KEY;
-}
-
-static void reset_string_after_escape(jsonpg_parser p)
-{
-        // After escape set enclosing string token.pos
-        // to point to after the escape sequence
-        assert(p->token_ptr > 0 && "Pop escape token with no enclosing string");
-        
-        p->tokens[p->token_ptr - 1].pos = p->current + 1;
-}
-
-static int process_escape(jsonpg_parser p, token t)
-{
-        // Only JSON specified escape chars get here
-        static char *escapes = "bfnrt\"\\/";
-        char *c = strchr(escapes, *t->pos);
-
-        assert(c && "Invalid escape character");
-
-        if(write_c("\b\f\n\r\t\"\\/"[c - escapes]))
-                return -1;
-
-        reset_string_after_escape(p);
-        return 0;
-}
-
-static int process_escape_chars(jsonpg_parser p, token t)
-{
-        if(write_c(*t->pos))
-                return -1;
-
-        reset_string_after_escape(p);
-        return 0;
-}
-
-static int parse_4hex(uint8_t *hex_ptr) {
-        int value = 0;
-        for(int i = 0 ; i < 4 ; i++) {
-                int v = *hex_ptr++;
-                if(v >= '0' && v <= '9') {
-                        v -= '0';
-                } else if(v >= 'A' && v <= 'F') {
-                        v -= 'A' - 10;
-                } else if(v >= 'a' && v <= 'f') {
-                        v -= 'a' - 10;
-                } else {
-                        assert(0 && "Invalid hex character");
-                }
-                value = (value << 4) | v;
-        }
-        return value;
-}
-
-static int process_escape_u(jsonpg_parser p, token t)
-{
-        // \uXXXX or \uXXXX\uXXXX
-        // token points to first "u"
-        int cp = parse_4hex(1 + t->pos);
-        if(p->current - t->pos > 9)
-                cp = surrogate_pair_to_codepoint(cp, parse_4hex(7 + t->pos));
-        if(write_utf8_codepoint(cp, p->write_buf))
-                return -1;
-
-        reset_string_after_escape(p);
         return 0;
 }
 
@@ -284,21 +88,17 @@ jsonpg_parser parser_reset(jsonpg_parser p)
 
 jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
 {
-        jsonpg_generator g;
-        jsonpg_parser p;
-
-        if(opts.parser) {
-                p = parser_reset(opts.parser);
-        } else {
-                p = jsonpg_parser_new(
-                                .max_nesting = opts.max_nesting,
-                                .flags = opts.flags);
-                if(!p)
-                        return make_error_return(JSONPG_ERROR_ALLOC, 0);
-        }
+        Generator g;
+        Parser p;
+        
+        p = jsonpg_parser_new(
+                        .max_nesting = opts.max_nesting,
+                        .flags = opts.flags);
+        if(!p)
+                return make_error_return(JSONPG_ERROR_ALLOC, 0);
 
         if(1 != (opts.bytes != NULL) + (opts.string != NULL) + (opts.dom != NULL)) {
-                alloc_error(p);
+                opt_error(p);
                 return p->result;
         }
 
@@ -308,12 +108,6 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
                  parser_set_bytes(p, (uint8_t *)opts.string, strlen(opts.string));
         } else if(opts.dom) {
                 parser_set_dom_info(p, dom_parser_info(opts.dom));
-        }
-
-        // Pull parsing, output opts ignored
-        if(opts.parser) {
-                p->result.type = JSONPG_PULL;
-                return p->result;
         }
 
         if(1 != (opts.callbacks != NULL) + (opts.generator != NULL)) {
@@ -332,7 +126,7 @@ jsonpg_value jsonpg_parse_opt(jsonpg_parse_opts opts)
                 g = generator_reset(opts.generator);
         }
         
-        jsonpg_value result = parse(p, g);
+        jsonpg_value result = parse_generate(p, g);
 
         jsonpg_parser_free(p);
         if(opts.callbacks)
@@ -346,7 +140,7 @@ static uint16_t get_stack_size(uint16_t stack_size)
         return stack_size > MIN_STACK_SIZE ? stack_size : MIN_STACK_SIZE;
 }
 
-jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
+Parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
 {
         uint16_t stack_size = get_stack_size(opts.max_nesting);
         uint16_t flags = opts.flags;
@@ -355,7 +149,7 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
         arena a = arena_new();
         if(!a)
                 return NULL;
-        jsonpg_parser p = arena_alloc(a, struct_bytes + ((stack_size + 7) / 8));
+        Parser p = arena_alloc(a, struct_bytes + ((stack_size + 7) / 8));
         if(p) {
                 p->arena = a;
                 p->write_buf = str_buf_new(a, 0);
@@ -369,18 +163,6 @@ jsonpg_parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
                 p->stack.size = stack_size;
                 p->stack.stack = (uint8_t *)(((void *)p) + struct_bytes);
                 p->flags = flags;
-
-                if(flags & JSONPG_FLAG_IS_OBJECT) {
-                        p->stack.ptr = 0;
-                        push_stack(&p->stack, STACK_OBJECT);
-                        p->stack.ptr_min = 1;
-                } else if(flags & JSONPG_FLAG_IS_ARRAY) {
-                        p->stack.ptr = 0;
-                        push_stack(&p->stack, STACK_ARRAY);
-                        p->stack.ptr_min = 1;
-                } else {
-                        p->stack.ptr_min = 0;
-                }
         }
         return p;
 }
