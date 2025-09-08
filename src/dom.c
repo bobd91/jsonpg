@@ -233,7 +233,7 @@ static jsonpg_generator dom_generator(jsonpg_generator g)
         return generator_set_callbacks(g, &dom_callbacks, root);
 }
 
-static jsonpg_type dom_parse_next(jsonpg_parser p)
+static jsonpg_type dom_parse_next(Parser p)
 {
         jsonpg_dom hdr = p->dom_info.hdr;
         size_t offset = p->dom_info.offset;
@@ -274,4 +274,91 @@ static jsonpg_type dom_parse_next(jsonpg_parser p)
         p->dom_info.hdr = hdr;
         p->dom_info.offset = offset;
         return type;
+}
+
+static ParseResult dom_parse(Parser p, Generator g)
+{
+        Dom hdr = p->dom_info->hdr;
+        size_t offset = sizeof(struct jsonpg_dom_s);
+
+        while(hdr) {
+                dom_node node = (dom_node)(offset + (void *)hdr);
+                offset += NODE_SIZE;
+                jsonpg_type type = node->is.type;
+                node++;
+                offset += NODE_SIZE;
+                size_t count = node->is.count;
+
+                switch(type) {
+                case JSONPG_STRING:
+                        node++;
+                        offset += dom_size_align(count);
+                        if(!jsonpg_string(g, node->is.bytes, count))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_KEY:
+                        node++;
+                        offset += dom_size_align(count);
+                        if(!jsonpg_key(g, node->is.bytes, count))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_TRUE:
+                case JSNOPG_FALSE:
+                        if(!jsonpg_boolean(g, type == JSONPG_TRUE))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_NULL:
+                        if(!jsonpg_null(g))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_START_OBJECT:
+                        if(!jsonpg_start_object(g))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_END_OBJECT:
+                        if(!jsonpg_end_object(g))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_START_ARRAY:
+                        if(!jsonpg_start_array(g))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_END_ARRAY:
+                        if(!jsonpg_end_array(g))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_INTEGER:
+                        node++;
+                        offset += NODE_SIZE;
+                        if(!jsongpg_integer(g, node->is.integer))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                case JSONPG_REAL:
+                        node++;
+                        offset += NODE_SIZE;
+                        if(!jsonpg_real(g, node->is.real))
+                                return make_pg_error_return(p, g);
+                        break;
+
+                default:
+                        return make_pg_error_return(p, g);
+                }
+                
+                if(offset >= hdr->count) {
+                        offset = sizeof(struct jsonpg_dom_s);
+                        hdr = hdr->next;
+                }
+        }
+
+        return (ParseResult) { .type = JSONPG_EOF };
+
 }

@@ -52,6 +52,22 @@ static jsonpg_value make_error_return(jsonpg_error_code code, size_t at)
         };
 }
 
+static ParseResult make_pg_error_return(Parser p, Generator g)
+{
+        ParseResult r = p->result;
+        if(r.type == JSONPG_ERROR) {
+                // Terminations come from generator
+                // Which MAY have set error info
+                if(r.error.code == JSONPG_TERMINATED
+                                && g->error.code) {
+                        r.error = g->error;
+                }
+        } else {
+                r = make_error_return(JSONPG_ERROR_UNEXPECTED, 0);
+        }
+        return r;
+}
+
 static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
 {
         g->error = make_error(code, g->count);

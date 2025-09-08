@@ -188,17 +188,7 @@ ParseResult parse(Parse p, Generator g)
                 parse_generate(p, p);
                 val.type = JSONPG_EOF;
         } else {
-                val = p->result;
-                if(val.type == JSONPG_ERROR) {
-                        // Terminations come from generator
-                        // Which MAY have set error info
-                        if(val.error.code == JSONPG_TERMINATED
-                                        && g->error.code) {
-                                val.error = g->error;
-                        }
-                } else {
-                        val = make_error(JSONPG_ERROR_UNEXPECTED, 0);
-                }
+                val = make_pg_error_return(p, g);
         }
 
         return val;
@@ -236,7 +226,11 @@ ParseResult jsonpg_parse_opt(jsonpg_parse_opts opts)
                 g = generator_reset(opts.generator);
         }
         
-        ParseResult result = parse(p, g);
+        ParseResult result;
+        if(opts.dom)
+                result = dom_parse(p, g);
+        else
+                result = parse(p, g);
 
         jsonpg_parser_free(p);
         if(opts.callbacks)

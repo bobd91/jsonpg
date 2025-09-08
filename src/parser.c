@@ -553,7 +553,7 @@ Parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
         return p;
 }
 
-jsonpg_value jsonpg_parse_result(Parser p)
+ParseResult jsonpg_parse_result(Parser p)
 {
         return p->result;
 }
