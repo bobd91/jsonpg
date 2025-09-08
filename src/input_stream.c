@@ -1,11 +1,12 @@
 
 
-MemoryInputStream mis_new(Allocator a, Bytes bytes, size_t count)
+MemoryInputStream mis_new(Allocator a)
 {
-        MemoryInputStream is = memory_allocate(a,
-                                        sizeof(struct memory_input_stream_s));
-        if(!mis)
-                return NULL;
+        return memory_allocate(a, sizeof(struct memory_input_stream_s));
+}
+
+void mis_set_bytes(Bytes bytes, size_t count)
+{
         is->bytes = bytes;
         is->count = count;
         is->current = 0;

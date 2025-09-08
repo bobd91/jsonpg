@@ -1,39 +1,4 @@
 #include "parser.h"
-
-static void parse_start_object(p)
-{
-        JSONPG_ASSERT(input_peek(p) == '{');
-
-        input_take(p);
-        stack_push(p, JSONPG_OBJECT);
-}
-
-static void parse_end_object(p)
-{
-        JSONPG_ASSERT(input_peek(p) == '}');
-        JSONPG_ASSERT(stack_peek(p) == STACK_OBJECT);
-
-        input_take(p);
-        input_pop(p);
-}
-
-static void parse_start_array(p)
-{
-        JSONPG_ASSERT(input_peek(p) == '[');
-
-        input_take(p);
-        stack_push(p, JSONPG_ARRAY);
-}
-
-static void parse_end_array(p)
-{
-        JSONPG_ASSERT(input_peek(p) == ']');
-        JSONPG_ASSERT(stack_peek(p) == STACK_ARRAY);
-
-        input_take(p);
-        input_pop(p);
-}
-
 static bool parser_in_object(p)
 {
         return stack_peek(p) == STACK_OBJECT;
@@ -49,22 +14,12 @@ static bool parser_in_any(p)
         return stack_depth(p) > 0;
 }
 
-static Byte parser_peek(Parser p)
-{
-        return input_peek(p);
-}
-
-static bool parser_consume(Parser p, Byte c)
-{
-        return input_consume(p, c);
-}
-
 static bool parser_eof(Parser p)
 {
-        return input_eof(p);
+        return mis_eof(p->mis);
 }
 
-static void parse_error(JsonpgParser p, unsigned error_code)
+static void parse_error(Parser p, unsigned error_code)
 {
         p->error = (JsonpgError) {
                 .code = error_code,
@@ -73,11 +28,45 @@ static void parse_error(JsonpgParser p, unsigned error_code)
         longjmp(p->env);
 }
 
+static void parse_start_object(p)
+{
+        JSONPG_ASSERT(mis_peek(p->mis) == '{');
+
+        mis_take(p->mis);
+        stack_push(p, JSONPG_OBJECT);
+}
+
+static void parse_end_object(p)
+{
+        JSONPG_ASSERT(mis_peek(p->mis) == '}');
+        JSONPG_ASSERT(stack_peek(p) == STACK_OBJECT);
+
+        mis_take(p->mis);
+        stack_pop(p);
+}
+
+static void parse_start_array(p)
+{
+        JSONPG_ASSERT(mis_peek(p->mis) == '[');
+
+        mis_take(p->mis);
+        stack_push(p, JSONPG_ARRAY);
+}
+
+static void parse_end_array(p)
+{
+        JSONPG_ASSERT(mis_peek(p->mis) == ']');
+        JSONPG_ASSERT(stack_peek(p) == STACK_ARRAY);
+
+        mis_take(p->mis);
+        stack_pop(p);
+}
+
 static void parse_true(Parser p)
 {
-        JSONPG_ASSERT(input_peek(p) == 't');
+        JSONPG_ASSERT(mis_peek(p->mis) == 't');
 
-        input_take(p);
+        mis_take(p->mis);
         if(!input_consume(p, 'r')
                         || !input_consume(p, 'u')
                         || !input_comsume(p, 'e'))
@@ -86,9 +75,9 @@ static void parse_true(Parser p)
 
 static void parse_false(Parser p)
 {
-        JSONPG_ASSERT(input_peek(p) == 'f');
+        JSONPG_ASSERT(mis_peek(p->mis) == 'f');
 
-        input_take(p);
+        mis_take(p->mis);
         if(!input_consume(p, 'a')
                         || !input_consume(p, 'l')
                         || !input_consume(p, 's')
@@ -98,9 +87,9 @@ static void parse_false(Parser p)
 
 static void parse_null(Parser p)
 {
-        JSONPG_ASSERT(input_peek(p) == 'n');
+        JSONPG_ASSERT(mis_peek(p->mis) == 'n');
 
-        input_take(p); // 'n'
+        mis_take(p->mis); // 'n'
         if(!input_consume(p, 'u')
                         || !input_consume(p, 'l')
                         || !input_comsume(p, 'l'))
@@ -111,7 +100,7 @@ static unsigned parse_hex4(Parser p, size_t esc_offset)
 {
         unsigned codepoint = 0;
         for(int i = 0 ; i < 4 ; i++) {
-                char c = input_peak(p);
+                char c = mis_peak(p->mis);
                 codepoint <<= 4;
                 if(c >= '0' && c <= '9')
                         codepoint += c - '0';
@@ -122,7 +111,7 @@ static unsigned parse_hex4(Parser p, size_t esc_offset)
                 else 
                         parse_error(p, ESCAPE, esc_offset);
 
-                input_take(p);
+                mis_take(p->mis);
         }
         return codepoint;
 }
@@ -134,15 +123,15 @@ static unsigned parse_escape(Parser p)
                 ['f'] = '\f', ['n'] = '\n', ['r'] = '\r',  ['t'] = '\t'
         };
 
-        const size_t esc_offset = input_tell(p);
-        input_take(p);
-        const unsigned char e = input_peek(p);
+        const size_t esc_offset = mis_tell(p->mis);
+        mis_take(p->mis);
+        const unsigned char e = mis_peek(p->mis);
         if(escape[e]) {
-                input_take(p);
+                mis_take(p->mis);
                 return (unsigned)escape[e];
         }
         if(e == 'u') {
-                input_take(p);
+                mis_take(p->mis);
                 unsigned codepoint = parse_hex4(p, esc_offset);
                 if(codepoint >= 0xD800 && codepoint <= 0xDFFF) {
                         // Got surrogate but high (first one) must be 0xD800-0xDBFF
@@ -169,7 +158,7 @@ static unsigned parse_escape(Parser p)
         }
 }
 
-static void consume_whitespace(MemoryInputStream mis)
+static void mis_consume_whitespace(MemoryInputStream mis)
 {
         Bytes c;
 
@@ -177,32 +166,31 @@ static void consume_whitespace(MemoryInputStream mis)
                 mis_take(is);
 }
 
-
-void jsonpg_consume_whitespace_only(Parser p)
+void consume_whitespace(Parser p, bool allow_comments)
 {
-        consume_whitespace(p->is);
-}
-
-void jsonpg_consume_whitespace_comments(Parser p)
-{
-        MemoryInputStream is = p->is;
+        MemoryInputStream mis = p->mis;
         Bytes c;
 
-        while(true) {
-                consume_whitespace(is);
+        if(!allow_comments) {
+                mis_consume_whitespace(mis);
+                return;
+        }
 
-                if(mis_consume(is, '/')) {
-                        c = mis_peek(is);
+        while(true) {
+                mis_consume_whitespace(mis);
+
+                if(mis_consume(mis, '/')) {
+                        c = mis_peek(mis);
                         if(c == '*') {
-                                mis_take(is);
+                                mis_take(mis);
                                 while(true) {
-                                        if(mis_consume(is, '*')) {
-                                                if(mis_consume(is, '/'))
+                                        if(mis_consume(mis, '*')) {
+                                                if(mis_consume(mis, '/'))
                                                         break;
-                                        } else if(mis_peek(is) == '\0') {
+                                        } else if(mis_peek(mis) == '\0') {
                                                 return;
                                         } else {
-                                                mis_take(is);
+                                                mis_take(mis);
                                         }
                                 }
                         } else if(c == '/') {
@@ -220,9 +208,9 @@ void jsonpg_consume_whitespace_comments(Parser p)
         }
 }
 
-static static void parse_string_to_cow(Parser p, CowStream cs, Byte terminator)
+static static void parse_string_to_cow(Parser p, CowStream cow, Byte terminator)
 {
-        MemoryInputStream mis = p->is;
+        MemoryInputStream mis = p->mis;
 
         while(true) {
                 //copy_safe_chars(p->is, os);
@@ -230,15 +218,15 @@ static static void parse_string_to_cow(Parser p, CowStream cs, Byte terminator)
                 unsigned char c = mis_peek(mis);
                 if(c == '\\') {
                         unsigned codepoint = parse_escape(p);
-                        Bytes s = cow_reserve(cs, 4);
+                        Bytes s = cow_reserve(cow, 4);
                         if(!s)
                                 parse_error(p, MEMORY);
                         int count = utf8_encode(codepoint, s);
                         if(count == -1)
                                 parse_error(p, UTF8);
-                        cow_adjust(cs, 4 - count);
+                        cow_adjust(cow, 4 - count);
                 } else if(c == terminator) {
-                        if(!cow_finalize(cs))
+                        if(!cow_finalize(cow))
                                 parse_error(p, MEMORY);
                         mis_take(mis);
                         return;
@@ -253,21 +241,22 @@ static static void parse_string_to_cow(Parser p, CowStream cs, Byte terminator)
         }
 }
 
-static static void parse_nqstring_to_cow(Parser p, CowStream cs)
+static static void parse_nqstring_to_cow(Parser p, CowStream cow)
 {
-        MemoryInputStream mis = p->is;
+        MemoryInputStream mis = p->mis;
 
         while(true) {
                 //copy_safe_chars(p->is, os);
                 
                 unsigned char c = mis_peek(mis);
                 if(c == '\\') {
-                        input_take(p);
-                        // Skip \ puts us out of sync with cow
-                        // reserve 0 will trigger cow write
-                        cow_reserve(cs, 0);
+                        mis_take(mis);
+                        // no quote escapes the next char so just skip \
+                        // But that puts us out of sync with cow so
+                        // reserve 0 to trigger cow write
+                        cow_reserve(cow, 0);
                 } else if(c == ' ' || c == '\n' || c == '\r' || c == '\t') {
-                        if(!cow_finalize(cs))
+                        if(!cow_finalize(cow))
                                 parse_error(p, MEMORY);
                         mis_take(mis);
                         return;
@@ -282,38 +271,36 @@ static static void parse_nqstring_to_cow(Parser p, CowStream cs)
         }
 }
 
-static static size_t parse_string(Parser p, Bytes *bytes, byte terminator)
+static size_t parse_string(Parser p, Bytes *bytes, byte terminator)
 {
-        CowStream cs = cow_new(p); // TODO: 1 cow stream per parser
-        if(!cs)
-                return 0;
+        CowStream cow = p->cow;
+        cow_start(cow);
 
-        parse_string_to_cow(p, cs, terminator);
-        size_t length = cow_length(cs);
-        Bytes str = cow_pop(cs);
+        parse_string_to_cow(p, cow, terminator);
+        size_t length = cow_length(cow);
+        Bytes str = cow_pop(cow);
         *bytes = str;
         return length;
 }
 
 static size_t parse_string(Parser p, Bytes *bytes)
 {
-        JSONPG_ASSERT(input_peek(p) == '"');
-        input_take(p); // "
+        JSONPG_ASSERT(mis_peek(p->mis) == '"');
+        mis_take(p->mis); // "
         parse_string(p, bytes, '"');
 }
 
 static size_t parse_sqstring(Parser p, Bytes *bytes)
 {
-        JSONPG_ASSERT(input_peek(p) == '\'');
-        input_take(p); // '
+        JSONPG_ASSERT(mis_peek(p->mis) == '\'');
+        mis_take(p->mis); // '
         parse_string(p, bytes, '\'');
 }
 
 static size_t parse_nqstring(Parser p, Bytes *bytes)
 {
-        CowStream cs = cow_new(p);
-        if(!cs)
-                return 0;
+        CowStream cow = p->cow;
+        cow_start(cow);
 
         parse_nqstring_to_cow(p, cs);
         size_t length = cow_length(cs);
@@ -480,538 +467,23 @@ static static jsonpg_type parse_number(Parser p, *double real, *long integer)
         }
 }
 
-static ParseState state_change_value(ParseState state)
+static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
 {
-        if(state == STATE_START) return STATE_DONE;
-        if(state == STATE_KEY) return STATE_KEY_VALUE;
-        if(state == STATE_ARRAY) return STATE_ARRAY_VALUE;
-        assert(false && "Invalid state");
+        // Skip leading byte order mark
+        bytes += utf8_bom_bytes(bytes, count);
+
+        mis_set_bytes(p->mis, bytes, count);
+        cow_start(p->cow);
 }
 
-static ParseState state_change_end(Parser p)
+static void parser_set_dom_info(Parser p, dom_info di)
 {
-        if(parser_in_object(p)) return STATE_KEY_VALUE;
-        if(parser_in_array(p)) return STATE_ARRAY_VALUE;
-        return STATE_DONE;
+        p->dom_info = di;
 }
 
-static jsonpg_value make_boolean(Parser p, bool is_true);
+static uint16_t get_stack_size(uint16_t stack_size)
 {
-        p->result.type = is_true ? JSONPG_TRUE : JSONPG_FALSE;
-        return p->result;
-}
-
-static jsonpg_value make_null(Parser p)
-{
-        p->result.type = JSONPG_NULL;
-        return p->result;
-}
-
-static jsonpg_value make_integer(Parser p, long integer)
-{
-        p->result.type = JSONPG_INTEGER;
-        p->result.number.integer = integer;
-        return p->result;
-}
-
-static jsonpg_value make_real(Parser p, double real)
-{
-        p->result.type = JSONPG_REAL;
-        p->result.number.real = real;
-        return p->result;
-}
-
-static jsonpg_value make_string(Parser p, Bytes bytes, size_t count)
-{
-        p->result.type = JSONPG_STRING;
-        p->result.string.bytes = bytes;
-        p->result.string.count = count;
-        return p->result;
-}
-
-static jsonpg_value make_key(Parser p, Bytes bytes, size_t count)
-{
-        p->result.type = JSONPG_KEY;
-        p->result.string.bytes = bytes;
-        p->result.string.count = count;
-        return p->result;
-}
-
-static jsonpg_value make_start_object(Parser p)
-{
-        p->result.type = JSONPG_START_OBJECT;
-        return p->result;
-}
-
-static jsonpg_value make_end_object(Parser p)
-{
-        p->result.type = JSONPG_END_OBJECT;
-        return p->result;
-}
-
-static jsonpg_value make_start_array(Parser p)
-{
-        p->result.type = JSONPG_START_ARRAY;
-        return p->result;
-}
-
-static jsonpg_value make_end_array(Parser p)
-{
-        p->result.type = JSONPG_END_ARRAY;
-        return p->result;
-}
-
-static jsonpg_value parse_next(Parser p)
-{
-        const bool opt_comment = p->flags & JSONPG_FLAG_COMMENT;
-        ParserState state = p->state;
-        unsigned char *bytes;
-        size_t count;
-        
-        parser_consume_whitespace(p, opt_comment);
-        Byte b = parser_peek(p);
-
-        if(state=STATE_EOF || b == '\0') {
-                parse_error(p, JSONPG_ERROR_EOF);
-
-        // States that are not just expecting values
-        switch(state) {
-
-        case STATE_KEY_VALUE:
-                if(b == '}') {
-                        parse_end_object(p);
-                        p->state = state_change_end(p);
-                        return make_end_object(p);
-                } else if(b == ',') {
-                        parser_take(p);
-                        parser_consume_whitespace(p, opt_comment);
-                        b = parser_peek(p);
-                        state = STATE_OBJECT_COMMA;
-                        break;
-                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMA)) {
-                        parse_error(p, JSONPG_ERROR_UNEXPECTED);
-                }
-
-                state = STATE_OBJECT;
-
-                // fall through as we are now in STATE_OBJECT
-
-        case STATE_OBJECT:
-                if(b == '}') {
-                        parse_end_object(p);
-                        p->state = state_change_end(p);
-                        return make_end_object(p);
-                } else if(b == '"') {
-                        count = parse_string(p, &bytes);
-                } else if((p->flags & JSONPG_FLAG_SINGLE_QUOTE) && b == '\'') {
-                        count = parse_sqstring(p, &bytes);
-                } else if(p->flags & JSONPG_FLAG_KEY_NO_QUOTE) {
-                        count = parse_nqstring(p, &bytes);
-                } else {
-                        parse_error(p, KEY);
-                }
-
-                parser_consume_whitespace(p, opt_comment);
-                if(parser_consume(p, ':'))
-                        parse_error(p, COLON);
-                
-                p->state = STATE_KEY;
-                return make_key(p, bytes, count); 
-
-        case STATE_ARRAY_VALUE:
-                if(b == ']') {
-                        parse_end_array(p);
-                        p->state = state_change_end(p);
-                        return make_end_object(p);
-                } else if(b == ",") {
-                        parser_take(p);
-                        parser_consume_whitespace(p, opt_comment);
-                        b = parser_peek(p);
-                        state = STATE_ARRAY_COMMA;
-                        break;
-                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMA)) {
-                        parse_error(p, JSONPG_ERROR_UNEXPECTED);
-                }
-
-                state = STATE_ARRAY;
-
-                // We could fall through as we are now in STATE_ARRAY
-                // but there is no point as that only handles the ']'
-                // case and we already know b != ']'
-                break;
-
-        case STATE_ARRAY:
-                if(b == ']') {
-                        parse_end_array(p);
-                        p->state = state_change_end(p);
-                        return make_end_object(p);
-                }
-                break;
-
-        case STATE_DONE:
-                if(!(p->flags & JSONPG_FLAG_IGNORE_TRAILING)) {
-                        parser_consume_whitespace(p, opt_comment);
-                        if(!parser_eof(p))
-                                parse_error(p, JSONPG_ERROR_UNEXPECTED);
-                }
-                p->state = STATE_EOF;
-                return make_eof(p);
-
-        default:
-                // Handle other states below
-        }
-
-        // state in 
-        //      START - any value { or [
-        //      KEY - any value { or [
-        //      OBJECT_COMMA - any value { or [ (or } if trailing commas)
-        //      ARRAY - any value { or [ (not ] as we checked above)
-        //      ARRAY_COMMA - any value { or [ (or ] if trailing commas)
-        //
-        // states STATE_OBJECT_COMMA and STATE_ARRAY_COMMA
-        // are transient states that never get set in the parser
-        // but are needed here to handle trailing comma option
-
-        assert(state == START || state == KEY || state == OBJECT_COMMA
-                        || state == ARRAY || state == ARRAY_COMMA);
-
-        switch(b) {
-        case '"':
-                count = parse_string(p, &bytes);
-                p->state = state_change_value(p->state);
-                return make_string(p, bytes, count); 
-
-        case '{': 
-                parse_start_object(p);
-                p->state = STATE_OBJECT;
-                return make_start_object(p);
-
-        case '[':
-                parse_start_array(p);
-                p->state = STATE_ARRAY;
-                return make_start_array(p);
-
-        case 't':
-                parse_true(p);
-                p->state = state_change_value(p->state);
-                return make_boolean(p, true);
-
-        case 'f':
-                parse_false(p);
-                p->state = state_change_value(p->state);
-                return make_boolean(false);
-
-        case 'n':
-                parse_null(p);
-                p->state = state_change_value(p->state);
-                return make_null(p);
-
-        case '\'':
-                if(!p->flags & JSONPG_FLAG_SINGLE_QUOTE)
-                        parse_error(p, UNEXPECTED);
-
-                count = parse_sqstring(p, &bytes);
-                p->state = state_change_value(p->state);
-                return make_string(p, bytes, count);
-
-        case '}':
-                if(!(state == STATE_OBJECT_COMMA
-                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMA)))
-                        parse_error(p, UNEXPECTED);
-
-                parse_end_object(p);
-                p->state = state_change_end(p);
-                return make_end_object(p);
-
-        case ']':
-                if(!(state == STATE_ARRAY_COMMA
-                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMA)))
-                        parse_error(p, UNEXPECTED);
-
-                parse_end_array(p);
-                p->state = state_change_end(p);
-                return make_end_array(p);
-
-        default:
-                if(b == '-' || ('0' <= b && b <= '9')) {
-                        double d;
-                        long l;
-                        if(JSONPG_REAL == parse_number(p, &d, &l)) {
-                                p->state = state_chaneg_value(p->state);
-                                return make_real(p, d);
-                        } else {
-                                p->state = state_chaneg_value(p->state);
-                                return make_integer(p, l);
-                        }
-                }
-
-                if(!(p->flags & JSONPG_FLAG_STRING_NO_QUOTE))
-                        parse_error(p, UNEXPECTED);
-
-                count = parse_nqstring(p, &bytes);
-                p->state = state_change_value(p->state);
-                return make_string(p, bytes, count);
-        }
-
-}
-
-jsonpg_value jsonpg_parse_next(Parser p)
-{
-        if(0 == setjmp(p->env))
-                return parse_next(p);
-
-        return p->result;
-}
-
-static static void parse_generate(Parser p, Generator g)
-{
-        const int flags = p->flags;
-        const bool opt_comment = flags & JSONPG_FLAG_COMMENT
-        const bool opt_single_quote = flags & JSONPG_FLAG_SINGLE_QUOTE;
-        const bool opt_key_no_quote = flags & JSONPG_FLAG_KEY_NO_QUOTE;
-        const bool opt_string_no_quote = flags & JSONPG_FLAG_STRING_NO_QUOTE;
-        const bool opt_trailing_comma = flags & JSONPG_FLAG_TRAILING_COMMA;
-        const bool opt_optional_comma = flags & JSONPG_FLAG_OPTIONAL_COMMA;
-        const bool opt_ignore_trailing = flags & JSONPG_FLAG_IGNORE_TRAILING;
-
-        unsigned char *bytes;
-        size_t count;
-        bool is_key = false;
-
-        do {
-                Byte b = parser_peek(p);
-
-                if(is_key) {
-                        if(b == '"')
-                                count = parse_string(p, &bytes);
-                        else if(opt_single quote && b == '\'') {
-                                count = parse_sqstring(p, &bytes);
-                        else if(opt_key_no_quote)
-                                count = parse_nqstring(p, &bytes);
-                        else
-                                parse_error(p, KEY);
-
-                        parser_consume_whitespace(p, opt_comment);
-                        if(parser_consume(p, ':'))
-                                parse_error(p, COLON);
-                        parser_consume_whitespace(p, opt_comment);
-                        
-                        if(!jsonpg_key(g, bytes, count)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        
-                        is_key = false;
-                        b = parser_peek(p);
-                }
-
-                switch(b) {
-                case '"':
-                        count = parse_string(p, &bytes);
-                        if(!jsonpg_string(g, bytes, count)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case '{': 
-                        parse_start_object(p);
-                        if(!jsonpg_start_object(g)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-
-                        parser_consume_whitespace(p, opt_comment);
-                        if(!parser_peek(p, '}')) {
-                                is_key = true;
-                                continue;
-                        }
-                        break;
-
-                case '[':
-                        parse_start_array(p);
-                        if(!jsonpg_start_array(g)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-
-                        parser_consume_whitespace(p, opt_comment);
-                        if(!parser_peek(p, ']'))
-                                continue
-
-                        break;
-
-                case 't':
-                        parse_true(p);
-                        if(!jsonpg_boolean(g, true)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case 'f':
-                        parse_false(p);
-                        if(!jsonpg_boolean(g, false)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case 'n':
-                        parse_null(p);
-                        if(!jsonpg_null(g)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case '\'':
-                        if(!opt_single_quote)
-                                parse_error(p, UNEXPECTED);
-
-                        count = parse_sqstring(p, &bytes);
-                        if(!jsonpg_string(p, bytes, count)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case '}':
-                        if(!opt_trailing_comma)
-                                parse_error(p, UNEXPECTED);
-
-                        parse_end_object(p);
-                        if(!jsonpg_end_object(g)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case ']':
-                        if(!opt_trailing_comma)
-                                parse_error(p, UNEXPECTED);
-
-                        parse_end_array(p);
-                        if(!jsonpg_end_array(g)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                default:
-                        if(b == '-' || ('0' <= b && b <= '9')) {
-                                double d;
-                                long l;
-                                if(JSONPG_REAL == parse_number(p, &d, &l))
-                                        if(!jsonpg_real(g, d)) 
-                                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                                else
-                                        if(!jsonpg_integer(g, l)) 
-                                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                                break;
-                        }
-
-                        if(!opt_string_no_quote)
-                                parse_error(p, UNEXPECTED);
-
-                        count = parse_nqstring(p, &bytes);
-                        if(!jsonpg_string(g, bytes, count)) 
-                                parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-                }
-
-                parser_consume_whitespace(p, opt_comment);
-
-                if(parser_in_object(p)) {
-                        if(parser_peek(p, '}')) {
-                                parse_end_object(p);
-                                if(!jsonpg_end_object(g)) 
-                                        parse_error(p, JSONPG_ERROR_TERMINATED);
-                                parser_consume_whitespace(p, opt_comment);
-                        }
-                } else if(parser_in_array(p)) {
-                        if(parser_peek(p, ']')) {
-                                parse_end_array(p);
-                                if(!jsonpg_end_array(g)) 
-                                        parse_error(p, JSONPG_ERROR_TERMINATED);
-                                parser_consume_whitespace(p, opt_comment);
-                        }
-                }
-                if(parser_in_any(p)) {
-                        if(parser_consume(p, ',')) {
-                                parser_consume_whitespace(p, opt_comment);
-                                is_key = parser_in_object(p);
-                                continue;
-                        }
-
-                        if(!opt_optional_comma)
-                                parse_error(p, UNEXPECTED);
-
-                        is_key = parser_in_object(p);
-                        continue;
-                } 
-                break;
-        } while(!parser_eof(p));
-
-        if(!opt_ignore_trailing) {
-                parser_consume_whitespace(p, opt_comment);
-                if(!parser_eof(p))
-                        parse_error(p, UNEXPECTED);
-        }
-}
-
-static bool default_null(void *ctx)
-{
-        (void)ctx;
-        return true;
-}
-
-static bool default_boolean(void *ctx, bool is_true)
-{
-        (void)ctx;
-        (void)is_true;
-        return true;
-}
-
-static bool default_integer(void *ctx, long integer)
-{
-        (void)ctx;
-        (void)integer;
-        return true;
-}
-
-static bool default_real(void *ctx, double real)
-{
-        (void)ctx;
-        (void)real;
-        return true;
-}
-
-static bool default_bytes(void *ctx, Bytes bytes, size_t count)
-{
-        (void)ctx;
-        (void)bytes;
-        (void)count;
-        return true;
-}
-
-static const Callbacks provide_default_callbacks(Callbacks *c)
-{
-        return (Callbacks) {
-                .boolean = c->boolean ? c->boolean : default_boolean,
-                .null = c->null ? c->null : default_null,
-                .integer = c->integer ? c->integer : default_integer,
-                .real = c->real ? c->real : default_real,
-                .string = c->string ? c->string : default_bytes,
-                .key = c->key ? c->key : default_bytes,
-                .start_object = c->start_object ? c->start_object : default_null;
-                .end_object = c->end_object ? c->end_object : default_null;
-                .start_array = c->start_array ? c->start_array : default_null;
-                .end_array = c->end_array ? c->end_array : default_null;
-        };
-}
-
-static void parse_callbacks(Parser p, Callbacks *c) {
-        p->callbacks = provide_default_callbacks(c);
-        parse_json(p);
-}
-
-
-
-
-Parser parser_new(Bytes bytes, size_t count, void *ctx)
-{
-        Allocator a = allocator_new();
-        parser p = allocator_alloc(sizeof(parser_s));
-        if(!p) {
-                allocator_free(a);
-                return NULL;
-        }
-        p->allocator = a;
-        p->is = mis_new(a, bytes, count);
-        p->ctx = ctx;
-
-        return p;
+        return stack_size > MIN_STACK_SIZE ? stack_size : MIN_STACK_SIZE;
 }
 
 void jsonpg_parser_free(Parser p)
@@ -1019,3 +491,74 @@ void jsonpg_parser_free(Parser p)
         allocator_free(p->allocator);
 }
 
+Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
+{
+        size_t struct_bytes = sizeof(struct jsonpg_parser_s);
+        Parser p = allocator_alloc(a, struct_bytes + ((stack_size + 7) / 8));
+        if(!p)
+                return NULL;
+
+        p->allocator = a;
+        p->result = (ParseResult) {};
+
+        p->mis = mis_new(a);
+        if(!p->mis)
+                return NULL;
+
+        p->cow = cow_new(a, p->mis);
+        if(!p->cow)
+                return NULL;
+
+        p->dom_info = (DomInfo){};
+
+        p->stack = {
+                .ptr = 0,
+                .size = stack_size,
+                .stack = (Bytes *)(((void *)p) + struct_bytes)
+        };
+        p->flags = flags;
+
+        return p;
+}
+
+Parser jsonpg_parser_new_opt(jsonpg_parser_opts opts)
+{
+        uint16_t stack_size = get_stack_size(opts.max_nesting);
+        uint16_t flags = opts.flags;
+
+        Allocator a = allocator_new();
+        if(!a)
+                return NULL;
+
+        Parser p = parser_new(a, stack_size, flags);
+
+        if(!p) {
+                allocator_free(a);
+                return NULL;
+        }
+
+        if(1 != (opts.bytes != NULL) + (opts.string != NULL) + (opts.dom != NULL)) {
+                opt_error(p);
+                return p;
+        }
+
+        if(opts.bytes) {
+                parser_set_bytes(p, opts.bytes, opts.count);
+        } else if(opts.string) {
+                parser_set_bytes(p, (Bytes)opts.string, strlen(opts.string));
+        } else if(opts.dom) {
+                parser_set_dom_info(p, dom_parser_info(opts.dom));
+        }
+
+        return p;
+}
+
+jsonpg_value jsonpg_parse_result(Parser p)
+{
+        return p->result;
+}
+
+jsonpg_error_value jsonpg_parse_error(Parser p)
+{
+        return p->result.error;
+}
