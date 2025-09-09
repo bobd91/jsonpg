@@ -1,60 +1,12 @@
 #pragma once
 
-// Shared project structures and typedefs
-//
-typedef unsigned char                   Byte;
-typedef Byte                            *Bytes;
+#include <stdint.h>
+#include <setjmp.h>
 
-typedef struct allocator_s              *Allocator;
-
-#define STACK_OBJECT 0
-#define STACK_ARRAY 1
-
-typedef struct {
-       uint16_t ptr;
-       uint16_t size;
-       Bytes    stack;
-} Stack;
-
-typedef struct {
-        Dom     hdr;
-        size_t  offset;
-} DomInfo;
-
-
-// Types exposed by library via opaque pointer
-
-struct jsonpg_parser_s {
-        Allocator                       allocator;
-        uint16_t                        flags;
-        MemoryInputStream               mis;
-        CowStream                       cow;
-        DomInfo                         dom_info;
-        ParseResult                     result;
-        Stack                           stack;
-}
-
-struct jsonpg_generator_s {
-        Allocator                       allocator;
-        JsonpgCallbacks                 *callbacks;
-        void                            *ctx;
-        bool                            key_next;
-        JsonpgErrorInfo                 error;
-        size_t                          count;
-        Stack                           stack;
-};
-
-struct jsonpg_dom_s {
-        Allocator allocator;
-        Dom next;
-        Dom current;
-        size_t count;
-        size_t size;
-};
-
-// Alias jsonpg stuff so we don't have to prefix stuff in code
-// The only jsonpg stuff left in code should be the
-// extern functions
+// Alias jsonpg types so we don't have to prefix our code
+// The only jsonpgs left in code should be 
+//  - the names of extern functions
+//  - the members of the JsonpgType and JsonpgErrorCode enums
 
 typedef JsonpgType                      JsonType;
 typedef JsonpgErrorCode                 ErrorCode;
@@ -70,3 +22,75 @@ typedef JsonpgDom                       Dom;
 typedef JsonpgParserOpts                ParserOpts;
 typedef JsonpgParseOpts                 ParseOpts;
 typedef JsonpgGeneratorOpts             GeneratorOpts;
+
+
+// Shared project structures and typedefs
+
+typedef unsigned char                   Byte;
+typedef Byte                            *Bytes;
+
+typedef struct allocator_s              *Allocator;
+typedef struct memory_input_stream_s    *MemoryInputStream;
+typedef struct memory_output_stream_s   *MemoryOutputStream;
+typedef struct cow_stream_s             *CowStream;
+typedef struct stack_s                  *Stack;
+
+#define STACK_OBJECT 0
+#define STACK_ARRAY 1
+
+struct stack_s {
+       uint16_t ptr;
+       uint16_t size;
+       Bytes    stack;
+};
+
+typedef struct dom_info_s {
+        Dom     hdr;
+        size_t  offset;
+} DomInfo;
+
+// For pull parser to keep track of where it is up to
+typedef enum {
+        STATE_START,
+        STATE_OBJECT,
+        STATE_KEY,
+        STATE_KEY_VALUE,
+        STATE_OBJECT_COMMA,
+        STATE_ARRAY,
+        STATE_ARRAY_VALUE,
+        STATE_ARRAY_COMMA,
+        STATE_DONE,
+        STATE_EOF
+} ParseState;
+
+// Types exposed by library via opaque pointer
+
+struct jsonpg_parser_s {
+        Allocator                       allocator;
+        uint16_t                        flags;
+        MemoryInputStream               mis;
+        CowStream                       cow;
+        ParseState                      state;
+        DomInfo                         dom_info;
+        ParseResult                     result;
+        jmp_buf                         env;
+        struct stack_s                  stack;
+};
+
+struct jsonpg_generator_s {
+        Allocator                       allocator;
+        JsonpgCallbacks                 *callbacks;
+        void                            *ctx;
+        bool                            key_next;
+        JsonpgErrorInfo                 error;
+        size_t                          count;
+        struct stack_s                  stack;
+};
+
+struct jsonpg_dom_s {
+        Allocator allocator;
+        Dom next;
+        Dom current;
+        size_t count;
+        size_t size;
+};

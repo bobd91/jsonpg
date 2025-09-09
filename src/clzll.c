@@ -16,10 +16,6 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-#ifndef RAPIDJSON_CLZLL_H_
-#define RAPIDJSON_CLZLL_H_
-
-#include "../rapidjson.h"
 
 #if defined(_MSC_VER) && !defined(UNDER_CE)
 #include <intrin.h>
@@ -33,7 +29,7 @@
 static inline uint32_t clzll(uint64_t x) {
     // Passing 0 to __builtin_clzll is UB in GCC and results in an
     // infinite loop in the software implementation.
-    JSONPG_ASSERT(x != 0);
+    ASSERT(x != 0);
 
 #if defined(_MSC_VER) && !defined(UNDER_CE)
     unsigned long r = 0;
@@ -49,7 +45,7 @@ static inline uint32_t clzll(uint64_t x) {
 #endif // _WIN64
 
     return 63 - r;
-#elif (defined(__GNUC__) && __GNUC__ >= 4) || JSONPG_HAS_BUILTIN(__builtin_clzll)
+#elif (defined(__GNUC__) && __GNUC__ >= 4) || HAS_BUILTIN(__builtin_clzll)
     // __builtin_clzll wrapper
     return (uint32_t)(__builtin_clzll(x));
 #else

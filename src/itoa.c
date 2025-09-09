@@ -200,7 +200,7 @@ static inline char* u64toa(uint64_t value, char* buffer) {
 }
 
 static inline char* i64toa(int64_t value, char* buffer) {
-    JSONPG_ASSERT(buffer);
+    ASSERT(buffer);
     uint64_t u = (uint64_t)(value);
     if (value < 0) {
         *buffer++ = '-';

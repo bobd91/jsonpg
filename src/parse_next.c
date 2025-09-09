@@ -15,95 +15,102 @@ static ParseState state_change_end(Parser p)
         return STATE_DONE;
 }
 
-static jsonpg_value accept_boolean(Parser p, bool is_true);
+static JsonType accept_boolean(Parser p, bool is_true)
 {
         p->state = state_change_value(p->state);
         p->result.type = is_true ? JSONPG_TRUE : JSONPG_FALSE;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_null(Parser p)
+static JsonType accept_null(Parser p)
 {
         p->state = state_change_value(p->state);
         p->result.type = JSONPG_NULL;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_integer(Parser p, long integer)
+static JsonType accept_integer(Parser p, long integer)
 {
         p->state = state_change_value(p->state);
         p->result.type = JSONPG_INTEGER;
         p->result.number.integer = integer;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_real(Parser p, double real)
+static JsonType accept_real(Parser p, double real)
 {
         p->state = state_change_value(p->state);
         p->result.type = JSONPG_REAL;
         p->result.number.real = real;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_string(Parser p, Bytes bytes, size_t count)
+static JsonType accept_string(Parser p, Bytes bytes, size_t count)
 {
         p->state = state_change_value(p->state);
         p->result.type = JSONPG_STRING;
         p->result.string.bytes = bytes;
         p->result.string.count = count;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_key(Parser p, Bytes bytes, size_t count)
+static JsonType accept_key(Parser p, Bytes bytes, size_t count)
 {
         p->state = STATE_KEY;
         p->result.type = JSONPG_KEY;
         p->result.string.bytes = bytes;
         p->result.string.count = count;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_start_object(Parser p)
+static JsonType accept_start_object(Parser p)
 {
         p->state = STATE_OBJECT;
         p->result.type = JSONPG_START_OBJECT;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_end_object(Parser p)
+static JsonType accept_end_object(Parser p)
 {
         p->state = state_change_end(p);
         p->result.type = JSONPG_END_OBJECT;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_start_array(Parser p)
+static JsonType accept_start_array(Parser p)
 {
         p->state = STATE_ARRAY;
         p->result.type = JSONPG_START_ARRAY;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value accept_end_array(Parser p)
+static JsonType accept_end_array(Parser p)
 {
         p->state = state_change_end(p);
         p->result.type = JSONPG_END_ARRAY;
-        return p->result;
+        return p->result.type;
 }
 
-static jsonpg_value parse_next(Parser p)
+static JsonType accept_eof(Parser p)
+{
+        p->result.type = JSONPG_EOF;
+        return p->result.type;
+}
+
+static JsonType  parse_next(Parser p)
 {
         const MemoryInputStream mis = p->mis;
-        const bool opt_comment = p->flags & JSONPG_FLAG_COMMENT;
-        ParserState state = p->state;
+        const bool opt_comments = p->flags & JSONPG_FLAG_COMMENTS;
+        ParseState state = p->state;
         unsigned char *bytes;
         size_t count;
         
-        parser_consume_whitespace(p, opt_comment);
-        Byte b = mis_peek(mis);
+        consume_whitespace(p, opt_comments);
 
-        if(state=STATE_EOF || b == '\0') {
-                parse_error(p, JSONPG_ERROR_EOF);
+        if(state == STATE_EOF || mis_eof(mis))
+                throw_parse_error(p, JSONPG_ERROR_EOF);
+
+        Byte b = mis_peek(mis);
 
         // States that are not just expecting values
         switch(state) {
@@ -114,12 +121,12 @@ static jsonpg_value parse_next(Parser p)
                         return accept_end_object(p);
                 } else if(b == ',') {
                         mis_take(mis);
-                        parser_consume_whitespace(p, opt_comment);
+                        consume_whitespace(p, opt_comments);
                         b = mis_peek(mis);
                         state = STATE_OBJECT_COMMA;
                         break;
-                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMA)) {
-                        parse_error(p, JSONPG_ERROR_UNEXPECTED);
+                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMAS)) {
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                 }
 
                 state = STATE_OBJECT;
@@ -132,17 +139,17 @@ static jsonpg_value parse_next(Parser p)
                         return accept_end_object(p);
                 } else if(b == '"') {
                         count = parse_string(p, &bytes);
-                } else if((p->flags & JSONPG_FLAG_SINGLE_QUOTE) && b == '\'') {
+                } else if((p->flags & JSONPG_FLAG_SINGLE_QUOTES) && b == '\'') {
                         count = parse_sqstring(p, &bytes);
-                } else if(p->flags & JSONPG_FLAG_KEY_NO_QUOTE) {
+                } else if(p->flags & JSONPG_FLAG_UNQUOTED_KEYS) {
                         count = parse_nqstring(p, &bytes);
                 } else {
-                        parse_error(p, KEY);
+                        throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
                 }
 
-                parser_consume_whitespace(p, opt_comment);
+                consume_whitespace(p, opt_comments);
                 if(mis_consume(mis, ':'))
-                        parse_error(p, COLON);
+                        throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
                 
                 return accept_key(p, bytes, count); 
 
@@ -150,14 +157,14 @@ static jsonpg_value parse_next(Parser p)
                 if(b == ']') {
                         parse_end_array(p);
                         return accept_end_object(p);
-                } else if(b == ",") {
+                } else if(b == ',') {
                         mis_take(mis);
-                        parser_consume_whitespace(p, opt_comment);
+                        consume_whitespace(p, opt_comments);
                         b = mis_peek(mis);
                         state = STATE_ARRAY_COMMA;
                         break;
-                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMA)) {
-                        parse_error(p, JSONPG_ERROR_UNEXPECTED);
+                } else if(!(p->flags & JSONPG_FLAG_OPTIONAL_COMMAS)) {
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                 }
 
                 state = STATE_ARRAY;
@@ -175,10 +182,10 @@ static jsonpg_value parse_next(Parser p)
                 break;
 
         case STATE_DONE:
-                if(!(p->flags & JSONPG_FLAG_IGNORE_TRAILING)) {
-                        parser_consume_whitespace(p, opt_comment);
+                if(!(p->flags & JSONPG_FLAG_IGNORE_TRAILING_CHARS)) {
+                        consume_whitespace(p, opt_comments);
                         if(!mis_eof(mis))
-                                parse_error(p, JSONPG_ERROR_UNEXPECTED);
+                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                 }
                 p->state = STATE_EOF;
                 return accept_eof(p);
@@ -198,8 +205,11 @@ static jsonpg_value parse_next(Parser p)
         // are transient states that never get set in the parser
         // but are needed here to handle trailing comma option
 
-        assert(state == START || state == KEY || state == OBJECT_COMMA
-                        || state == ARRAY || state == ARRAY_COMMA);
+        assert(state == STATE_START 
+                        || state == STATE_KEY 
+                        || state == STATE_OBJECT_COMMA
+                        || state == STATE_ARRAY 
+                        || state == STATE_ARRAY_COMMA);
 
         switch(b) {
         case '"':
@@ -220,31 +230,31 @@ static jsonpg_value parse_next(Parser p)
 
         case 'f':
                 parse_false(p);
-                return accept_boolean(false);
+                return accept_boolean(p, false);
 
         case 'n':
                 parse_null(p);
                 return accept_null(p);
 
         case '\'':
-                if(!p->flags & JSONPG_FLAG_SINGLE_QUOTE)
-                        parse_error(p, UNEXPECTED);
+                if(!(p->flags & JSONPG_FLAG_SINGLE_QUOTES))
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 
                 count = parse_sqstring(p, &bytes);
                 return accept_string(p, bytes, count);
 
         case '}':
                 if(!(state == STATE_OBJECT_COMMA
-                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMA)))
-                        parse_error(p, UNEXPECTED);
+                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMAS)))
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 
                 parse_end_object(p);
                 return accept_end_object(p);
 
         case ']':
                 if(!(state == STATE_ARRAY_COMMA
-                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMA)))
-                        parse_error(p, UNEXPECTED);
+                                        && (p->flags & JSONPG_FLAG_TRAILING_COMMAS)))
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 
                 parse_end_array(p);
                 return accept_end_array(p);
@@ -260,8 +270,8 @@ static jsonpg_value parse_next(Parser p)
                         }
                 }
 
-                if(!(p->flags & JSONPG_FLAG_STRING_NO_QUOTE))
-                        parse_error(p, UNEXPECTED);
+                if(!(p->flags & JSONPG_FLAG_UNQUOTED_STRINGS))
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 
                 count = parse_nqstring(p, &bytes);
                 return accept_string(p, bytes, count);
@@ -269,15 +279,15 @@ static jsonpg_value parse_next(Parser p)
 
 }
 
-jsonpg_value parser_parse_next(Parser p)
+JsonType parser_parse_next(Parser p)
 {
         if(0 == setjmp(p->env))
                 return parse_next(p);
 
-        return p->result;
+        return p->result.type;
 }
 
-jsonpg_type jsonpg_parse_next(Parser p)
+JsonType jsonpg_parse_next(Parser p)
 {
         if(p->mis->count)
                 return parser_parse_next(p);

@@ -20,6 +20,8 @@
 // Loitsch, Florian. "Printing floating-point numbers quickly and accurately with
 // integers." ACM Sigplan Notices 45.6 (2010): 233-243.
 
+#include <string.h>
+
 static inline void grisu_round(char* buffer, int len, uint64_t delta, uint64_t rest, uint64_t ten_kappa, uint64_t wp_w) {
     while (rest < wp_w && delta - rest >= ten_kappa &&
            (rest + ten_kappa < wp_w ||  /// closer
@@ -51,7 +53,7 @@ static inline void digit_gen(const DiyFp W, const DiyFp Mp, uint64_t delta, char
                                        10000000000000ULL, 100000000000000ULL, 1000000000000000ULL,
                                        10000000000000000ULL, 100000000000000000ULL, 1000000000000000000ULL,
                                        10000000000000000000ULL };
-    const DiyFp one = {uint64_t(1) << -Mp.e, Mp.e};
+    const DiyFp one = {((uint64_t)1) << -Mp.e, Mp.e};
     const DiyFp wp_w = diyfp_sub(Mp, W);
     uint32_t p1 = (uint32_t)(Mp.f >> -one.e);
     uint64_t p2 = Mp.f & (one.f - 1);
@@ -106,8 +108,8 @@ static inline void grisu2(double value, char* buffer, int* length, int* K) {
     DiyFp w_m, w_p;
     diyfp_normalized_boundaries(v, &w_m, &w_p);
 
-    const DiyFp c_mk = get_cached_power(w_p.e, K);
-    const DiyFp W = diyfp_mul(diy_fp_normalize(v), c_mk);
+    const DiyFp c_mk = diyfp_get_cached_power(w_p.e, K);
+    const DiyFp W = diyfp_mul(diyfp_normalize(v), c_mk);
     DiyFp Wp = diyfp_mul(w_p, c_mk);
     DiyFp Wm = diyfp_mul(w_m, c_mk);
     Wm.f++;

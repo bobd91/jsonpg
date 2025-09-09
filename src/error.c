@@ -62,7 +62,7 @@ static ParseResult make_pg_error_return(Parser p, Generator g)
         if(r.type == JSONPG_ERROR) {
                 // Terminations come from generator
                 // Which MAY have set error info
-                if(r.error.code == JSONPG_TERMINATED
+                if(r.error.code == JSONPG_ERROR_TERMINATED
                                 && g->error.code) {
                         r.error = g->error;
                 }
@@ -72,21 +72,12 @@ static ParseResult make_pg_error_return(Parser p, Generator g)
         return r;
 }
 
-static void set_generator_error(Generator g, ErrorCode code)
-{
-        g->error = make_error(code, g->count);
-
-#ifdef JSONPG_DEBUG
-        dump_g(g);
-#endif
-}
-
 static JsonType set_result_error(Parser p, ErrorCode code) 
 {
         p->result.type = JSONPG_ERROR;
         p->result.error.code = code;
-        p->result.error.at = (p->input && p->current)
-                ? p->current - p->input
+        p->result.error.at = p->mis->bytes
+                ? p->mis->current
                 : 0;
 
 #ifdef JSONPG_DEBUG
@@ -96,24 +87,9 @@ static JsonType set_result_error(Parser p, ErrorCode code)
         return JSONPG_ERROR;
 }
 
-static JsonType parse_error(Parser p)
-{
-        return set_result_error(p, JSONPG_ERROR_PARSE);
-}
-
-static JsonType number_error(Parser p)
-{
-        return set_result_error(p, JSONPG_ERROR_NUMBER);
-}
-
 static JsonType alloc_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_ALLOC);
-}
-
-static JsonType file_read_error(Parser p)
-{
-        return set_result_error(p, JSONPG_ERROR_FILE_READ);
 }
 
 static JsonType opt_error(Parser p)

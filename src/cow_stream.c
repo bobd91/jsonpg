@@ -1,17 +1,23 @@
 
 #define COW_MOS_CAPACITY  256
 
+struct cow_stream_s {
+        MemoryOutputStream mos;
+        MemoryInputStream mis;
+        size_t ptr;
+        bool copied;
+};
+
 CowStream cow_new(Allocator a, MemoryInputStream mis)
 {
-        CowStream cow = allocator_allocate(a, sizeof(struct cow_stream_s));
+        CowStream cow = allocator_alloc(a, sizeof(struct cow_stream_s));
         if(!cow)
                 return NULL;
 
         cow->mos = mos_new(a, COW_MOS_CAPACITY);
-        if(!cow->mos) {
-                allocator_free(cow);
+        if(!cow->mos)
                 return NULL;
-        }
+
         cow->mis = mis;
 
         return cow;
@@ -20,7 +26,7 @@ CowStream cow_new(Allocator a, MemoryInputStream mis)
 void cow_start(CowStream cow)
 {
         cow->copied = false;
-        cow->ptr = mis_peek(cow->mis);
+        cow->ptr = mis_tell(cow->mis);
         mos_reset(cow->mos);
 }
 
@@ -41,7 +47,7 @@ Bytes cow_pop(CowStream cow)
 void cow_adjust(CowStream cow, size_t amount)
 {
         mos_adjust(cow->mos, amount);
-        cow->mis_ptr = mis_tell(cow->mis);
+        cow->ptr = mis_tell(cow->mis);
 }
 
 Bytes cow_reserve(CowStream cow, size_t count)
@@ -53,9 +59,9 @@ Bytes cow_reserve(CowStream cow, size_t count)
         if(!s)
                 return NULL;
 
-        memcpy(s, mis_at(cow->mis, cow->mis_ptr), to_copy);
+        memcpy(s, mis_at(cow->mis, cow->ptr), to_copy);
 
-        cow->mis_ptr += to_copy;
+        cow->ptr += to_copy;
         s += to_copy;
         
         return s;
@@ -64,7 +70,7 @@ Bytes cow_reserve(CowStream cow, size_t count)
 bool cow_finalize(CowStream cow)
 {
         return cow->copied
-                ? cow_reserve(cow, 0)
+                ? cow_reserve(cow, 0) != NULL
                 : true;
 }
 

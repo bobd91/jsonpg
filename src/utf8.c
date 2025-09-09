@@ -66,23 +66,26 @@ static bool is_valid_codepoint(int cp)
 }
 
 /*
- * Writes a Unicode codepoint as utf-8 bytes to the provided string buffer
+ * Writes a Unicode codepoint as utf-8 bytes to the provided byte array
+ * The provided byte array must have space for up to 4 characters
  *
  * The codepoint should be valid before calling this function
  *
- * Returns 0 on success, otherwise -1
+ * Returns number of bytes written
+ * Will return -1 on non-debug build if an invalid codepoint is supplied
+ * In a debug build it will fail an assertion
  */      
-static int write_utf8_codepoint(int cp, str_buf write_buf) 
+static int utf8_encode(int cp, Bytes bytes) 
 {
         int shift = 0;
-        uint8_t lead_byte;
+        Byte lead_byte;
         if(cp <= _1_BYTE_MAX) {
                 // Ascii, just one byte
-                lead_byte = (uint8_t)cp;
+                lead_byte = (Byte)cp;
         } else if(cp <= _2_BYTE_MAX) {
                 // 2 byte UTF8, byte 1 is 110 and highest 5 bits
                 shift = 6;
-                lead_byte = (uint8_t)(_2_BYTE_LEADER 
+                lead_byte = (Byte)(_2_BYTE_LEADER 
                                         | LO_5_BITS(cp >> shift));
         } else if(is_surrogate(cp)) {
                 // UTF-16 surrogates are not legal Unicode
@@ -91,43 +94,39 @@ static int write_utf8_codepoint(int cp, str_buf write_buf)
         } else if(cp <= _3_BYTE_MAX) {
                 // 3 byte UTF8, byte 1 is 1110 and highest 4 bits
                 shift = 12;
-                lead_byte = (uint8_t)(_3_BYTE_LEADER 
+                lead_byte = (Byte)(_3_BYTE_LEADER 
                                         | LO_4_BITS(cp >> shift));
         } else if(cp <= CODEPOINT_MAX) {
                 // 4 byte UTF8, byte 1 is 11110 and highest 3 bytes
                 shift = 18;
-                lead_byte = (uint8_t)(_4_BYTE_LEADER 
+                lead_byte = (Byte)(_4_BYTE_LEADER 
                                         | LO_3_BITS(cp >> shift));
         } else {
                 // value to large to be legal Unicode
                 assert(0 && "Codepoint invalid: above maximum value");
                 return -1; // wont get here but ...
         }
-        if(str_buf_append_c(write_buf, lead_byte))
-                return -1;
+        int pos = 0;
+        bytes[pos++] = lead_byte;
         // Now any continuation bytes
         // high two bits '10' and next highest 6 bits from codepoint 
         while(shift > 0) {
                 shift -= 6;
-                if(str_buf_append_c(write_buf, CONTINUATION_BYTE 
-                                        | LO_6_BITS(cp >> shift)))
-                        return -1;
+                bytes[pos++] = CONTINUATION_BYTE | LO_6_BITS(cp >> shift);
         }
-        return 0;
+        return pos;
 }
 
 /*
  * Validates a sequence of utf-8 bytes (1-4 bytes) and 
  * returns the byte length if valid, else -1
  */
-static int valid_utf8_sequence(uint8_t *bytes, size_t count) 
+static int utf8_validate_sequence(MemoryInputStream mis) 
 {
         int codepoint;
         int bar;
         int cont;
-        uint8_t *start = bytes;
-        uint8_t byte = *start++;
-        int length;
+        Byte byte = mis_peek(mis);
 
         if(IS_2_BYTE_LEADER(byte)) {
                 codepoint = LO_5_BITS(byte);
@@ -146,24 +145,29 @@ static int valid_utf8_sequence(uint8_t *bytes, size_t count)
                 bar = -1;
                 cont = 0;
         } else {
-                return 0;
+                return -1;
         }
 
         // Do we have enough input for leader and continuation bytes
-        if(count < 1 + cont)
-                return 0;
+        if(mis->count < 1 + cont)
+                return -1;
 
+        // Move past leader
+        mis_take(mis);
+
+        int length;
         for(length = 1 ; length <= cont ; length++) {
-                byte = *start++;
+                byte = mis_peek(mis);
                 if(!IS_CONTINUATION(byte)) 
-                        return 0;
+                        return -1;
+                mis_take(mis);
                 codepoint = (codepoint << 6) | LO_6_BITS(byte);
         }
 
         // If we got here then either all valid or all invalid
         // Could be an overlong encoding or an encoding of an invalid codepoint
         if(codepoint <= bar || !is_valid_codepoint(codepoint)) 
-                return 0;
+                return -1;
 
         return length;
 }
@@ -175,23 +179,23 @@ static int valid_utf8_sequence(uint8_t *bytes, size_t count)
  *
  * Returns 0 if valid and succeeds in writing bytes, otherwise -1
  */
-static int write_utf8_sequence(uint8_t *bytes, size_t count, str_buf write_buf) 
-{
-        int len = valid_utf8_sequence(bytes, count);
-
-        if(len > 0 && write_buf) {
-                if(str_buf_append(write_buf, bytes, len))
-                        return -1;
-        }
-
-        return len;
-}
+// static int write_utf8_sequence(Bytes bytes, size_t count, str_buf write_buf) 
+// {
+//         int len = valid_utf8_sequence(bytes, count);
+//
+//         if(len > 0 && write_buf) {
+//                 if(str_buf_append(write_buf, bytes, len))
+//                         return -1;
+//         }
+//
+//         return len;
+// }
 
 /*
  * Counts the number of characters that match the byte order mark
  * Returns the length of the BOM if all bytes match, or 0
  */
-static size_t utf8_bom_bytes(uint8_t *bytes, size_t count)
+static size_t utf8_bom_bytes(Bytes bytes, size_t count)
 {
         static size_t bom_count = sizeof(BYTE_ORDER_MARK) / sizeof(BYTE_ORDER_MARK[0]);
         return (count >= bom_count 
@@ -204,28 +208,28 @@ static size_t utf8_bom_bytes(uint8_t *bytes, size_t count)
  * Returns non-zero if the supplied byte is valid
  * as the first byte of a surrogate pair  
  */
-static bool is_first_surrogate(uint8_t byte)
-{
-        return IS_1ST_SURROGATE(byte);
-}
-
+// static bool is_first_surrogate(Byte byte)
+// {
+//         return IS_1ST_SURROGATE(byte);
+// }
+//
 /*
  * Returns non-zero if the supplied byte is valid
  * as the second item of a surrogate pair  
  */
-static bool is_second_surrogate(uint8_t byte)
-{
-        return IS_2ND_SURROGATE(byte);
-}
-
+// static bool is_second_surrogate(Byte byte)
+// {
+//         return IS_2ND_SURROGATE(byte);
+// }
+//
 /*
  * Combines a valid utf16 surrogate pair into a valid Unicode codepoint
  */
-static int surrogate_pair_to_codepoint(int u1, int u2)
-{
-        // 110110yyyyyyyyyy 110111xxxxxxxxxx 
-        // => 0x10000 + yyyyyyyyyyxxxxxxxxxx
-        return SURROGATE_OFFSET 
-                + (SURROGATE_LO_BITS(u1) << 10) 
-                + SURROGATE_LO_BITS(u2);
-}
+// static int surrogate_pair_to_codepoint(int u1, int u2)
+// {
+//         // 110110yyyyyyyyyy 110111xxxxxxxxxx 
+//         // => 0x10000 + yyyyyyyyyyxxxxxxxxxx
+//         return SURROGATE_OFFSET 
+//                 + (SURROGATE_LO_BITS(u1) << 10) 
+//                 + SURROGATE_LO_BITS(u2);
+// }

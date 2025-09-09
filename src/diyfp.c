@@ -22,11 +22,21 @@
 
 #include <math.h>
 
-#define UINT64_C2 (high32, low32) (((uint64_t)high32) << 32) | (uint64_t)low32)
+#define UINT64_C2(high32, low32) ((((uint64_t)high32) << 32) | (uint64_t)low32)
+
+static const int kDiySignificandSize = 64;
+static const int kDpSignificandSize = 52;
+static const int kDpExponentBias = 0x3FF + kDpSignificandSize;
+static const int kDpMaxExponent = 0x7FF - kDpExponentBias;
+static const int kDpMinExponent = -kDpExponentBias;
+static const int kDpDenormalExponent = -kDpExponentBias + 1;
+static const uint64_t kDpExponentMask = UINT64_C2(0x7FF00000, 0x00000000);
+static const uint64_t kDpSignificandMask = UINT64_C2(0x000FFFFF, 0xFFFFFFFF);
+static const uint64_t kDpHiddenBit = UINT64_C2(0x00100000, 0x00000000);
 
 typedef struct {
         uint64_t f;
-        int exp;
+        int e;
 } DiyFp;
 
 static DiyFp diyfp_from_double(double d)
@@ -60,18 +70,18 @@ static DiyFp diyfp_sub(DiyFp lhs, DiyFp rhs)
 static DiyFp diyfp_mul(DiyFp lhs, DiyFp rhs)
 {
 #if __STDC_VERSION__ > 202300L
-        typedef unsigned _BitInt(128)  u128
+        typedef unsigned _BitInt(128)  u128;
 
-        u128 p = (u128)(f) * (u128)(rhs.f);
+        u128 p = (u128)(lhs.f) * (u128)(rhs.f);
         uint64_t h = (uint64_t)(p >> 64);
         uint64_t l = (uint64_t)(p);
-        if (l & (uint64_t(1) << 63)) // rounding
+        if (l & (((uint64_t)1) << 63)) // rounding
             h++;
-        return (DiyFp){h, e + rhs.e + 64};
+        return (DiyFp){h, lhs.e + rhs.e + 64};
 #else
         const uint64_t M32 = 0xFFFFFFFF;
-        const uint64_t a = f >> 32;
-        const uint64_t b = f & M32;
+        const uint64_t a = lhs.f >> 32;
+        const uint64_t b = lhs.f & M32;
         const uint64_t c = rhs.f >> 32;
         const uint64_t d = rhs.f & M32;
         const uint64_t ac = a * c;
@@ -80,7 +90,7 @@ static DiyFp diyfp_mul(DiyFp lhs, DiyFp rhs)
         const uint64_t bd = b * d;
         uint64_t tmp = (bd >> 32) + (ad & M32) + (bc & M32);
         tmp += 1U << 31;  /// mult_round
-        return (DiyFp){ac + (ad >> 32) + (bc >> 32) + (tmp >> 32), e + rhs.e + 64};
+        return (DiyFp){ac + (ad >> 32) + (bc >> 32) + (tmp >> 32), lhs.e + rhs.e + 64};
 #endif
 }
 
@@ -104,47 +114,36 @@ static void diyfp_normalized_boundaries(DiyFp fp, DiyFp* minus, DiyFp* plus)
 {
         DiyFp pl = diyfp_normalize_boundary((DiyFp){(fp.f << 1) + 1, fp.e - 1});
         DiyFp mi = (fp.f == kDpHiddenBit)
-                        ? (DiyFp){(fp.f << 2) - 1, fp.e - 2) 
-                        : (DiyFp){(fp.f << 1) - 1, fp.e - 1);
+                        ? (DiyFp){(fp.f << 2) - 1, fp.e - 2} 
+                        : (DiyFp){(fp.f << 1) - 1, fp.e - 1};
         mi.f <<= mi.e - pl.e;
         mi.e = pl.e;
         *plus = pl;
         *minus = mi;
 }
-
-static double diyfp_to_double(DiyFp fp) {
-        union {
-            double d;
-            uint64_t u64;
-        } u;
-
-        JSONPG_ASSERT(dp.f <= kDpHiddenBit + kDpSignificandMask);
-        if (fp.e < kDpDenormalExponent) {
-            // Underflow.
-            return 0.0;
-        }
-        if (fp.e >= kDpMaxExponent) {
-            // Overflow.
-            return INFINITY;
-        }
-        const uint64_t be = (fp.e == kDpDenormalExponent && (fp.f & kDpHiddenBit) == 0) 
-                                ? 0
-                                : (uint64_t)(fp.e + kDpExponentBias);
-        u.u64 = (fp.f & kDpSignificandMask) | (be << kDpSignificandSize);
-        return u.d;
-}
-
-static const int kDiySignificandSize = 64;
-static const int kDpSignificandSize = 52;
-static const int kDpExponentBias = 0x3FF + kDpSignificandSize;
-static const int kDpMaxExponent = 0x7FF - kDpExponentBias;
-static const int kDpMinExponent = -kDpExponentBias;
-static const int kDpDenormalExponent = -kDpExponentBias + 1;
-static const uint64_t kDpExponentMask = UINT64_C2(0x7FF00000, 0x00000000);
-static const uint64_t kDpSignificandMask = UINT64_C2(0x000FFFFF, 0xFFFFFFFF);
-static const uint64_t kDpHiddenBit = UINT64_C2(0x00100000, 0x00000000);
-
-
+//
+// static double diyfp_to_double(DiyFp fp) {
+//         union {
+//             double d;
+//             uint64_t u64;
+//         } u;
+//
+//         ASSERT(fp.f <= kDpHiddenBit + kDpSignificandMask);
+//         if (fp.e < kDpDenormalExponent) {
+//             // Underflow.
+//             return 0.0;
+//         }
+//         if (fp.e >= kDpMaxExponent) {
+//             // Overflow.
+//             return INFINITY;
+//         }
+//         const uint64_t be = (fp.e == kDpDenormalExponent && (fp.f & kDpHiddenBit) == 0) 
+//                                 ? 0
+//                                 : (uint64_t)(fp.e + kDpExponentBias);
+//         u.u64 = (fp.f & kDpSignificandMask) | (be << kDpSignificandSize);
+//         return u.d;
+// }
+//
 static inline DiyFp diyfp_get_cached_power_by_index(size_t index) {
     // 10^-348, 10^-340, ..., 10^340
     static const uint64_t k_cached_powers_f[] = {
@@ -204,7 +203,7 @@ static inline DiyFp diyfp_get_cached_power_by_index(size_t index) {
         641,   667,   694,   720,   747,   774,   800,   827,   853,   880,
         907,   933,   960,   986,  1013,  1039,  1066
     };
-    JSONPG_ASSERT(index < 87);
+    ASSERT(index < 87);
     return (DiyFp){k_cached_powers_f[index], k_cached_powers_e[index]};
 }
 
@@ -223,7 +222,7 @@ static inline DiyFp diyfp_get_cached_power(int e, int* K) {
 }
 
 static inline DiyFp diyfp_get_cached_power10(int exp, int *outExp) {
-    JSONPG_ASSERT(exp >= -348);
+    ASSERT(exp >= -348);
     unsigned index = (unsigned)(exp + 348) / 8u;
     *outExp = -348 + (int)(index) * 8;
     return diyfp_get_cached_power_by_index(index);
