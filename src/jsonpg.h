@@ -47,25 +47,25 @@ typedef enum {
         JSONPG_ERROR_EXPECTED_KEY,
         JSONPG_ERROR_NO_OBJECT,
         JSONPG_ERROR_NO_ARRAY,
-        JSONPG_ERROR_ABORT
+        JSONPG_ERROR_TERMINATED
 } JsonpgErrorCode;
 
-typedef struct jsonpg_string_info_s {
+typedef struct {
         Bytes *bytes;
         size_t count;
 } JsonpgStringInfo;
 
-typedef union jsonpg_number_info_u {
+typedef union {
         long integer;
         double real;
 } JsonpgNumberInfo;
 
-typedef struct jsonpg_error_result_s {
+typedef struct {
         JsonpgErrorCode code;
         size_t at;
 } JsonpgErrorInfo;
 
-typedef struct jsonpg_result_s {
+typedef struct 
         JsonpgType type;
         union {
                 JsonpgNumberInfo number;

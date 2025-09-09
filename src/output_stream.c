@@ -1,11 +1,21 @@
 
+typedef struct memory_output_stream_s *MemoryOutputStream;
 
-MemoryOutputStream mos_new(Allocator a, size_t initial_capacity)
+struct memory_output_stream_s {
+        Allocator allocator;
+        size_t initial_capacity;
+        size_t capacity;
+        size_t count;
+        Bytes buffer;
+};
+
+static MemoryOutputStream mos_new(Allocator a, size_t initial_capacity)
 {
         MemoryOutputStream mos = memory_allocate(a, 
                                         sizeof(struct memory_output_stream_s));
         if(!mos)
                 return NULL;
+
         mos->allocator = a
         mos->initial_capacity = initial_capacity > 0 
                                 ? initial_capacity 
@@ -17,17 +27,17 @@ MemoryOutputStream mos_new(Allocator a, size_t initial_capacity)
         return mos;
 }
 
-void mos_reset(MemoryOutputStream mos)
+static void mos_reset(MemoryOutputStream mos)
 {
         mos->count = 0;
 }
 
-size_t mos_length(MemoryOutputStream mos)
+static size_t mos_length(MemoryOutputStream mos)
 {
         return mos->count;
 }
 
-bool mos_put(MemoryOutputStream mos, Byte chr)
+static bool mos_put(MemoryOutputStream mos, Byte chr)
 {
         Bytes s = mos_reserve(mos, 1);
         if(!s)
@@ -36,7 +46,7 @@ bool mos_put(MemoryOutputStream mos, Byte chr)
         return true;
 }
 
-bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
+static bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
 {
         Bytes s = mos_reserve(mos, count);
         if(!s)
@@ -45,7 +55,7 @@ bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
         return true;
 }
 
-bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
+static bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
 {
         Bytes s = mos_reserve(mos, count);
         if(!s)
@@ -54,20 +64,20 @@ bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
         return true;
 }
 
-Bytes mos_pop(MemoryOutputStream mos)
+static Bytes mos_pop(MemoryOutputStream mos)
 {
         mos->count = 0;
         return mos->buffer;
 }
 
-void mos_adjust(MemoryOutputStream mos, ssize_t amount)
+static void mos_adjust(MemoryOutputStream mos, ssize_t amount)
 {
         JSONPG_ASSERT(mos->count + amount >= 0);
 
         mos->count += amount;
 }
 
-Bytes mos_grow(MemoryOutputStream mos, size_t incr)
+static Bytes mos_grow(MemoryOutputStream mos, size_t incr)
 {
         size_t size = mos->capacity 
                 ? mos->capacity << 1
@@ -93,7 +103,7 @@ Bytes mos_grow(MemoryOutputStream mos, size_t incr)
 }
 
 
-Bytes mos_reserve(MemoryOutputStream mos, size_t count)
+static Bytes mos_reserve(MemoryOutputStream mos, size_t count)
 {
         Bytes str = mos->buffer + mos->count;
 
@@ -104,7 +114,18 @@ Bytes mos_reserve(MemoryOutputStream mos, size_t count)
         return str;
 }
 
-JsonOuputStream jos_new(Allocator a, MemoryOutputStream mos, unsigned indent)
+typedef struct json_output_stream_s *JsonOutputStream;
+
+struct json_output_stream_s {
+        MemoryOutputStream mos;
+        unsigned indent;
+        unsigned level;
+        bool nl;
+        bool comma;
+        bool key;
+};
+
+static JsonOuputStream jos_new(Allocator a, MemoryOutputStream mos, unsigned indent)
 {       
         JsonOutputStream jos = allocator_alloc(a, sizeof(struct json_output_stream_c));
         if(!jos)
@@ -117,22 +138,22 @@ JsonOuputStream jos_new(Allocator a, MemoryOutputStream mos, unsigned indent)
         jos->level = 0;
 }
 
-bool jos_put(JsonOutputStream jos, Byte chr)
+static bool jos_put(JsonOutputStream jos, Byte chr)
 {
         return mos_put(jos->mos, chr);
 }
 
-bool jos_putn(JsonOutputStream jos, Byte chr, size_t count)
+static bool jos_putn(JsonOutputStream jos, Byte chr, size_t count)
 {
         return mos_putn(jos->mos, chr, count);
 }
 
-bool jos_puts(JsonOutputStream jos, Bytes string, size_t count)
+static bool jos_puts(JsonOutputStream jos, Bytes string, size_t count)
 {
         return mos_puts(jos->mos, string, count);
 }
 
-size_t find_next_escape(Bytes string, size_t count, size_t start)
+static size_t find_next_escape(Bytes string, size_t count, size_t start)
 {
         for(int i = start ; i < count ; i++) {
                 Byte chr = string[i];
@@ -142,7 +163,7 @@ size_t find_next_escape(Bytes string, size_t count, size_t start)
         return i;
 }
 
-bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
+static bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
 {
         static char *s_escapes[] = {
                 "00", "01", "02", "03",
@@ -170,7 +191,7 @@ bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
         while(count > (pmos2 = find_next_escape(string, count, pmos1))) {
                 chr = string[pmos2];
 
-                if(!jos_puts(jos, string + pmos1, pmos2 - pmos1))
+                if(!mos_puts(mos, string + pmos1, pmos2 - pmos1))
                         return false;
                 
                 // chr will be < 0x20, '"' or '\\'
@@ -196,10 +217,10 @@ bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
 
                 pmos1 = pmos2 + 1;
         }
-        return jos_puts(jos, string + pmos1, pmos2 - pmos1);
+        return mos_puts(mos, string + pmos1, pmos2 - pmos1);
 }
 
-bool jos_puti(JsonOutputStream jos, long integer)
+static bool jos_puti(JsonOutputStream jos, long integer)
 {
         Bytes s = mos_reserve(jos->mos, 20);
         if(!s)
@@ -212,7 +233,7 @@ bool jos_puti(JsonOutputStream jos, long integer)
         return true;
 }
 
-bool jos_putr(JsonOutputStream jos, double real)
+static bool jos_putr(JsonOutputStream jos, double real)
 {
         Bytes s = mos_reserve(jos->mos, 25);
         if(!s)
@@ -292,13 +313,13 @@ static bool jos_key_suffix(JsonOutputStream jos)
 
 
 
-bool print_null(JsonOutputStream jos)
+static bool print_null(JsonOutputStream jos)
 {
         return jos_prefix(jos)
                 && jos_puts(jos, "null", 4);
 }
 
-bool print_boolean(JsonOutputStream jos, bool is_true)
+static bool print_boolean(JsonOutputStream jos, bool is_true)
 {
         return jos_prefix(jos)
                         && (is_true
@@ -306,7 +327,7 @@ bool print_boolean(JsonOutputStream jos, bool is_true)
                                 : jos_puts(jos, "false,", 6));
 }
 
-bool print_string_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
+static bool print_string_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
 {
         return jos_prefix(jos)
                 && jos_put(jos, '"')
@@ -314,7 +335,7 @@ bool print_string_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
                 && jos_put(jos, '"');
 }
 
-bool print_key_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
+static bool print_key_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
 {
         return jos_prefix(jos)
                 && jos_put(jos, '"')
@@ -323,39 +344,39 @@ bool print_key_bytes(JsonOutputStream jos, Bytes bytes, size_t count)
                 && jos_key_suffix(jos);
 }
 
-bool print_integer(JsonOutputStream jos, long integer)
+static bool print_integer(JsonOutputStream jos, long integer)
 {
         return jos_prefix(jos)
                 && jos_puti(jos, integer)
                 && jos_put(jos, ',');
 }
 
-bool print_double(JsonOutputStream jos, double real)
+static bool print_double(JsonOutputStream jos, double real)
 {
         return jos_prefix(jos)
                 && jos_putr(jos, real)
                 && jos_put(jos, ',');
 }
 
-bool void print_start_object(JsonOutputStream jos)
+static bool void print_start_object(JsonOutputStream jos)
 {
         return jos_prefix_start(jos)
                 && jos_put(jos, '{');
 }
 
-bool print_end_object(JsonOutputStream jos)
+static bool print_end_object(JsonOutputStream jos)
 {
         return jos_prefix_end(jos)
                 && jos_put(jos, '}');
 }
 
-bool print_start_array(JsonOutputStream jos)
+static bool print_start_array(JsonOutputStream jos)
 {
         return jos_prefix_start(jos)
                 && jos_put(jos, '[');
 }
 
-bool print_end_array(JsonOutputStream jos)
+static bool print_end_array(JsonOutputStream jos)
 {
         return jos_prefix_end(jos)
                 && jos_put(jos, ']');

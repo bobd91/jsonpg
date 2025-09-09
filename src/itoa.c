@@ -1,6 +1,6 @@
 // See LICENCE
 //
-// Converted to C from RapidJSON C++
+// Portions converted to C from RapidJSON C++
 // 
 // Tencent is pleased to support the open source community by making RapidJSON available.
 //
@@ -16,9 +16,7 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-#pragma once
-
-inline const char* get_digits_lut() {
+static inline const char* get_digits_lut() {
     static const char c_digits_lut[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
         '1','0','1','1','1','2','1','3','1','4','1','5','1','6','1','7','1','8','1','9',
@@ -34,8 +32,7 @@ inline const char* get_digits_lut() {
     return c_digits_lut;
 }
 
-inline char* u64toa(uint64_t value, char* buffer) {
-    JSONPG_ASSERT(buffer);
+static inline char* u64toa(uint64_t value, char* buffer) {
     const char* c_digits_lut = get_digits_lut();
     const uint64_t  k_ten8 = 100000000;
     const uint64_t  k_ten9 = k_ten8 * 10;
@@ -202,7 +199,7 @@ inline char* u64toa(uint64_t value, char* buffer) {
     return buffer;
 }
 
-inline char* i64toa(int64_t value, char* buffer) {
+static inline char* i64toa(int64_t value, char* buffer) {
     JSONPG_ASSERT(buffer);
     uint64_t u = (uint64_t)(value);
     if (value < 0) {

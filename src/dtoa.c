@@ -1,6 +1,6 @@
 // See LICENSE
 //
-// Converted to C from RapidJSON C++
+// Portions converted to C from RapidJSON C++
 //
 // Tencent is pleased to support the open source community by making RapidJSON available.
 // 
@@ -20,12 +20,7 @@
 // Loitsch, Florian. "Printing floating-point numbers quickly and accurately with
 // integers." ACM Sigplan Notices 45.6 (2010): 233-243.
 
-#pragma once
-
-#include "itoa.h" // GetDigitsLut()
-#include "diyfp.h"
-
-inline void grisu_round(char* buffer, int len, uint64_t delta, uint64_t rest, uint64_t ten_kappa, uint64_t wp_w) {
+static inline void grisu_round(char* buffer, int len, uint64_t delta, uint64_t rest, uint64_t ten_kappa, uint64_t wp_w) {
     while (rest < wp_w && delta - rest >= ten_kappa &&
            (rest + ten_kappa < wp_w ||  /// closer
             wp_w - rest > rest + ten_kappa - wp_w)) {
@@ -34,7 +29,7 @@ inline void grisu_round(char* buffer, int len, uint64_t delta, uint64_t rest, ui
     }
 }
 
-inline int count_decimal_digit32(uint32_t n) {
+static inline int count_decimal_digit32(uint32_t n) {
     // Simple pure C++ implementation was faster than __builtin_clz version in this situation.
     if (n < 10) return 1;
     if (n < 100) return 2;
@@ -50,7 +45,7 @@ inline int count_decimal_digit32(uint32_t n) {
     return 9;
 }
 
-inline void digit_gen(const DiyFp W, const DiyFp Mp, uint64_t delta, char* buffer, int* len, int* K) {
+static inline void digit_gen(const DiyFp W, const DiyFp Mp, uint64_t delta, char* buffer, int* len, int* K) {
     static const uint64_t kPow10[] = { 1ULL, 10ULL, 100ULL, 1000ULL, 10000ULL, 100000ULL, 1000000ULL, 10000000ULL, 100000000ULL,
                                        1000000000ULL, 10000000000ULL, 100000000000ULL, 1000000000000ULL,
                                        10000000000000ULL, 100000000000000ULL, 1000000000000000ULL,
@@ -106,7 +101,7 @@ inline void digit_gen(const DiyFp W, const DiyFp Mp, uint64_t delta, char* buffe
     }
 }
 
-inline void grisu2(double value, char* buffer, int* length, int* K) {
+static inline void grisu2(double value, char* buffer, int* length, int* K) {
     const DiyFp v = diyfp_from_double(value);
     DiyFp w_m, w_p;
     diyfp_normalized_boundaries(v, &w_m, &w_p);
@@ -120,7 +115,7 @@ inline void grisu2(double value, char* buffer, int* length, int* K) {
     digit_gen(W, Wp, Wp.f - Wm.f, buffer, length, K);
 }
 
-inline char* write_exponent(int K, char* buffer) {
+static inline char* write_exponent(int K, char* buffer) {
     if (K < 0) {
         *buffer++ = '-';
         K = -K;
@@ -144,7 +139,7 @@ inline char* write_exponent(int K, char* buffer) {
     return buffer;
 }
 
-inline char* prettify(char* buffer, int length, int k, int max_decimal_places) {
+static inline char* prettify(char* buffer, int length, int k, int max_decimal_places) {
     const int kk = length + k;  // 10^(kk-1) <= v < 10^kk
 
     if (0 <= k && kk <= 21) {
@@ -210,7 +205,7 @@ inline char* prettify(char* buffer, int length, int k, int max_decimal_places) {
     }
 }
 
-inline char* dtoa(double value, char* buffer, int max_decimal_places) {
+static inline char* dtoa(double value, char* buffer, int max_decimal_places) {
     max_decimal_places = max_decimal_places > 0 ? max_decimal_places : 324;    
     if (value == 0) {
         buffer[0] = '0';

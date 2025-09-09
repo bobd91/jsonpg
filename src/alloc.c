@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ARENA_DEFAULT_ALLOCS 1024
+#define ALLOCATOR_DEFAULT_ALLOCS 1024
 
 // These are the low level allocators 
 // Default to malloc, realloc and free but can be replaced
@@ -20,47 +20,46 @@ void jsonpg_set_allocators(
 }
 
 
-// This is not actually an arena allocator,
-// but it looks like one from the outside.
+// This is not an arena allocator, but it looks like one from the outside.
 // Internally it just keeps track of all allocations so that it can free
-// them when the arena is freed.
+// them when the allocator is freed.
 
-typedef struct arena_s *arena;
+typedef struct allocator_s *Allocator;
 
-struct arena_s {
+struct allocator_s {
         size_t used;
         size_t capacity;
         void ** allocs;
 };
 
-static arena arena_new()
+static Allocator allocator_new()
 {
-        arena a = pg_alloc(sizeof(struct arena_s));
+        Allocator a = pg_alloc(sizeof(struct allocator_s));
         if(!a)
                 return NULL;
 
-        void **allocs = pg_alloc(ARENA_DEFAULT_ALLOCS * sizeof(void *));
+        void **allocs = pg_alloc(ALLOCATOR_DEFAULT_ALLOCS * sizeof(void *));
         if(!allocs) {
                 pg_dealloc(a);
                 return NULL;
         }
 
         JSONPG_LOG("Arena %p created with allocation buffer %p\n", 
-                        a, ARENA_DEFAULT_ALLOCS, allocs);
+                        a, ALLOCATOR_DEFAULT_ALLOCS, allocs);
 
         a->used = 0;
-        a->capacity = ARENA_DEFAULT_ALLOCS;
+        a->capacity = ALLOCATOR_DEFAULT_ALLOCS;
         a->allocs = allocs;
 
         return a;
 }
 
-static void arena_free(void *p)
+static void allocator_free(void *p)
 {
         if(!p)
                 return;
         
-        arena a = p;
+        Allocator a = p;
 
         for(int i = 0 ; i < a->used ; i++) {
                 JSONPG_LOG("Allocation[%ld] %p freed\n", i, a->allocs[i]);
@@ -74,7 +73,7 @@ static void arena_free(void *p)
         pg_dealloc(a);
 }
 
-static void *arena_alloc(arena a, size_t size)
+static void *allocator_alloc(Allocator a, size_t size)
 {
         if(a->used == a->capacity) {
                 void **new_a = pg_realloc(a->allocs, a->capacity << 1);
@@ -94,7 +93,7 @@ static void *arena_alloc(arena a, size_t size)
         return p;
 }
 
-static void *arena_realloc(arena a, void *p, size_t new_size)
+static void *allocator_realloc(Allocator a, void *p, size_t new_size)
 {
         for(int i = 0 ; i < a->used ; i++) {
                 if(p == a->allocs[i]) {

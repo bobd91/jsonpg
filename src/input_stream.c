@@ -1,23 +1,30 @@
 
+typedef struct memory_input_stream_s *MemoryInputStream;
 
-MemoryInputStream mis_new(Allocator a)
+struct memory_input_stream_s {
+        Bytes bytes;
+        size_t count;
+        size_t current;
+}
+
+static MemoryInputStream mis_new(Allocator a)
 {
         return memory_allocate(a, sizeof(struct memory_input_stream_s));
 }
 
-void mis_set_bytes(Bytes bytes, size_t count)
+static void mis_set_bytes(Bytes bytes, size_t count)
 {
         is->bytes = bytes;
         is->count = count;
         is->current = 0;
 }
 
-size_t mis_tell(MemoryInputStream mis)
+static size_t mis_tell(MemoryInputStream mis)
 {
         return mis->current;
 }
 
-Bytes mis_at(MemoryInputStream mis, size_t pos)
+static Bytes mis_at(MemoryInputStream mis, size_t pos)
 {
         if(pos >= mis->count)
                 return NULL;
@@ -25,7 +32,7 @@ Bytes mis_at(MemoryInputStream mis, size_t pos)
         return mis->bytes + pos;
 }
 
-size_t mis_length(MemoryInputStream mis)
+static size_t mis_length(MemoryInputStream mis)
 {
         return mis->count;
 }
@@ -37,7 +44,7 @@ static bool mis_eof(MemoryInputStream mis)
         return mis->current == mis->count;
 }
 
-Byte mis_peek(MemoryInputStream mis)
+static Byte mis_peek(MemoryInputStream mis)
 {
         if(mis_eof(mis))
                 return '\0';
@@ -45,7 +52,7 @@ Byte mis_peek(MemoryInputStream mis)
         return mis->bytes[mis->current];
 }
 
-Byte mis_take(MemoryInputStream mis)
+static Byte mis_take(MemoryInputStream mis)
 {
         if(mes_eof(mis))
                 return '\0';

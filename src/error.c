@@ -1,13 +1,17 @@
 #include <stdio.h>
 
 #ifdef JSONPG_DEBUG
-static void dump_p(jsonpg_parser p)
+static void dump_p(Parser p)
 {
         fprintf(stderr, "Parser Error:\n");
         fprintf(stderr, "Error: %d\n", p->result.error.code);
         fprintf(stderr, "At Position: %ld\n", p->result.error.at);
-        fprintf(stderr, "Input Length: %ld\n", p->last - p->input);
-        fprintf(stderr, "Input Processed: %ld\n", p->current - p->input);
+        if(p->mis->count) {
+                fprintf(stderr, "Input Length: %ld\n", p->mis->count);
+                fprintf(stderr, "Input Processed: %ld\n", p->mis->count - p->mis->ptr);
+        } else {
+                fprintf(stderr, "Parsing DOM\n");
+        }
         fprintf(stderr, "Stack Size: %d\n", p->stack.size);
         fprintf(stderr, "Stack Pointer: %d\n", p->stack.ptr);
         fprintf(stderr, "Stack: ");
@@ -21,7 +25,7 @@ static void dump_p(jsonpg_parser p)
 
 }
 
-static void dump_g(jsonpg_generator g)
+static void dump_g(Generator g)
 {
         fprintf(stderr, "Generator Error:\n");
         fprintf(stderr, "Error: %d\n", g->error.code);
@@ -39,14 +43,14 @@ static void dump_g(jsonpg_generator g)
 }
 #endif
 
-static jsonpg_error_value make_error(jsonpg_error_code code, size_t at)
+static ErrorInfo make_error(ErrorCode code, size_t at)
 {
-        return (jsonpg_error_value){ .code = code, .at = at };
+        return (ErrorInfo){ .code = code, .at = at };
 }
 
-static jsonpg_value make_error_return(jsonpg_error_code code, size_t at)
+static ParseResult make_error_return(ErrorCode code, size_t at)
 {
-        return (jsonpg_value) {
+        return (ParseResult) {
                         .type = JSONPG_ERROR,
                         .error = make_error(code, at)
         };
@@ -68,7 +72,7 @@ static ParseResult make_pg_error_return(Parser p, Generator g)
         return r;
 }
 
-static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
+static void set_generator_error(Generator g, ErrorCode code)
 {
         g->error = make_error(code, g->count);
 
@@ -77,7 +81,7 @@ static void set_generator_error(jsonpg_generator g, jsonpg_error_code code)
 #endif
 }
 
-static jsonpg_type set_result_error(jsonpg_parser p, jsonpg_error_code code) 
+static JsonType set_result_error(Parser p, ErrorCode code) 
 {
         p->result.type = JSONPG_ERROR;
         p->result.error.code = code;
@@ -92,27 +96,27 @@ static jsonpg_type set_result_error(jsonpg_parser p, jsonpg_error_code code)
         return JSONPG_ERROR;
 }
 
-static jsonpg_type parse_error(jsonpg_parser p)
+static JsonType parse_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_PARSE);
 }
 
-static jsonpg_type number_error(jsonpg_parser p)
+static JsonType number_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_NUMBER);
 }
 
-static jsonpg_type alloc_error(jsonpg_parser p)
+static JsonType alloc_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_ALLOC);
 }
 
-static jsonpg_type file_read_error(jsonpg_parser p)
+static JsonType file_read_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_FILE_READ);
 }
 
-static jsonpg_type opt_error(jsonpg_parser p)
+static JsonType opt_error(Parser p)
 {
         return set_result_error(p, JSONPG_ERROR_OPT);
 }

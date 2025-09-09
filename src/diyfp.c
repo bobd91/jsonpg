@@ -1,6 +1,6 @@
 // See LICENCE
 //
-// Converted to C from JapidJSON C++
+// Portions converted to C from JapidJSON C++
 //
 // Tencent is pleased to support the open source community by making RapidJSON available.
 //
@@ -20,11 +20,7 @@
 // Loitsch, Florian. "Printing floating-point numbers quickly and accurately with
 // integers." ACM Sigplan Notices 45.6 (2010): 233-243.
 
-#pragma once
-
 #include <math.h>
-#include "clzll.h"
-#include "../macros.h"
 
 #define UINT64_C2 (high32, low32) (((uint64_t)high32) << 32) | (uint64_t)low32)
 
@@ -33,7 +29,7 @@ typedef struct {
         int exp;
 } DiyFp;
 
-DiyFp diyfp_from_double(double d)
+static DiyFp diyfp_from_double(double d)
 {
         uint64_t f;
         int e;
@@ -56,12 +52,12 @@ DiyFp diyfp_from_double(double d)
         return (DiyFp){ f, e };
 }
 
-DiyFp diyfp_sub(DiyFp lhs, DiyFp rhs)
+static DiyFp diyfp_sub(DiyFp lhs, DiyFp rhs)
 {
         return (DiyFp){ lhs.f - rhs.f, lhs.e};
 }
 
-DiyFp diyfp_mul(DiyFp lhs, DiyFp rhs)
+static DiyFp diyfp_mul(DiyFp lhs, DiyFp rhs)
 {
 #if __STDC_VERSION__ > 202300L
         typedef unsigned _BitInt(128)  u128
@@ -88,12 +84,12 @@ DiyFp diyfp_mul(DiyFp lhs, DiyFp rhs)
 #endif
 }
 
-DiyFp diyfp_normalize(DiyFp fp) {
+static DiyFp diyfp_normalize(DiyFp fp) {
         int s = (int)(clzll(fp.f));
         return (DiyFp){fp.f << s, fp.e - s};
 }
 
-DiyFp diyfp_normalize_boundary(DiyFp fp) {
+static DiyFp diyfp_normalize_boundary(DiyFp fp) {
         DiyFp res = fp;
         while (!(res.f & (kDpHiddenBit << 1))) {
                 res.f <<= 1;
@@ -104,9 +100,9 @@ DiyFp diyfp_normalize_boundary(DiyFp fp) {
         return res;
 }
 
-void diyfp_normalized_boundaries(DiyFp fp, DiyFp* minus, DiyFp* plus) 
+static void diyfp_normalized_boundaries(DiyFp fp, DiyFp* minus, DiyFp* plus) 
 {
-        DiyFp pl = diyfp_normalize_boundary((DiyFp){(fp.f << 1) + 1, fp.e - 1};
+        DiyFp pl = diyfp_normalize_boundary((DiyFp){(fp.f << 1) + 1, fp.e - 1});
         DiyFp mi = (fp.f == kDpHiddenBit)
                         ? (DiyFp){(fp.f << 2) - 1, fp.e - 2) 
                         : (DiyFp){(fp.f << 1) - 1, fp.e - 1);
@@ -116,7 +112,7 @@ void diyfp_normalized_boundaries(DiyFp fp, DiyFp* minus, DiyFp* plus)
         *minus = mi;
 }
 
-double diyfp_to_double(DiyFp fp) {
+static double diyfp_to_double(DiyFp fp) {
         union {
             double d;
             uint64_t u64;
@@ -149,7 +145,7 @@ static const uint64_t kDpSignificandMask = UINT64_C2(0x000FFFFF, 0xFFFFFFFF);
 static const uint64_t kDpHiddenBit = UINT64_C2(0x00100000, 0x00000000);
 
 
-inline DiyFp diyfp_get_cached_power_by_index(size_t index) {
+static inline DiyFp diyfp_get_cached_power_by_index(size_t index) {
     // 10^-348, 10^-340, ..., 10^340
     static const uint64_t k_cached_powers_f[] = {
         UINT64_C2(0xfa8fd5a0, 0x081c0288), UINT64_C2(0xbaaee17f, 0xa23ebf76),
@@ -212,7 +208,7 @@ inline DiyFp diyfp_get_cached_power_by_index(size_t index) {
     return (DiyFp){k_cached_powers_f[index], k_cached_powers_e[index]};
 }
 
-inline DiyFp diyfp_get_cached_power(int e, int* K) {
+static inline DiyFp diyfp_get_cached_power(int e, int* K) {
 
     //int k = static_cast<int>(ceil((-61 - e) * 0.30102999566398114)) + 374;
     double dk = (-61 - e) * 0.30102999566398114 + 347;  // dk must be positive, so can do ceiling in positive
@@ -226,7 +222,7 @@ inline DiyFp diyfp_get_cached_power(int e, int* K) {
     return diyfp_get_cached_power_by_index(index);
 }
 
-inline DiyFp diyfp_get_cached_power10(int exp, int *outExp) {
+static inline DiyFp diyfp_get_cached_power10(int exp, int *outExp) {
     JSONPG_ASSERT(exp >= -348);
     unsigned index = (unsigned)(exp + 348) / 8u;
     *outExp = -348 + (int)(index) * 8;
