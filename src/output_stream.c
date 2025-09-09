@@ -86,10 +86,12 @@ static bool mos_put(MemoryOutputStream mos, Byte chr)
 
 static bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
 {
-        Bytes s = mos_reserve(mos, count);
-        if(!s)
-                return false;
-        memset(s, chr, count);
+        if(count) {
+                Bytes s = mos_reserve(mos, count);
+                if(!s)
+                        return false;
+                memset(s, chr, count);
+        }
         return true;
 }
 

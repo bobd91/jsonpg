@@ -342,25 +342,29 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         else
                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
 
-        c = mis_take(mis);
+        c = mis_peek(mis);
         if(sum) {
                 while(c >= '0' && c <= '9') {
+                        mis_take(mis);
                         if(overflow || c == '0') {
                                 exponent++;
                         } else {
-                                new_sum = sum * pow_10(exponent) + c - '0';
-                                if(new_sum < sum)
+                                new_sum = sum * pow_10(1 + exponent) + c - '0';
+                                if(new_sum < sum) {
+                                        exponent++;
                                         overflow = true;
-                                else
+                                } else {
+                                        exponent = 0;
                                         sum = new_sum;
+                                }
                         }
-                        c = mis_take(mis);
+                        c = mis_peek(mis);
                 }
         }
         if(c == '.') {
+                mis_take(mis);
                 force_double = true;
 
-                c = mis_take(mis);
                 if(!overflow && exponent) {
                         new_sum = sum * pow_10(exponent);
                         if(new_sum < sum) 
@@ -371,7 +375,9 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                         }
                 }
 
+                c = mis_peek(mis);
                 if(c >= '0' && c <= '9') {
+                        mis_take(mis);
                         if(!overflow) {
                                 new_sum = 10 * sum + c - '0';
                                 if(new_sum < sum) {
@@ -381,12 +387,13 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                                         exponent--;
                                 }
                         }
-                        c = mis_take(mis);
+                        c = mis_peek(mis);
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
                 }
 
                 while(c >= '0' && c <= '9') {
+                        mis_take(mis);
                         if(!overflow) {
                                 new_sum = 10 * sum + c - '0';
                                 if(new_sum < sum) {
@@ -396,29 +403,34 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                                         exponent--;
                                 }
                         }
-                        c = mis_take(mis);
+                        c = mis_peek(mis);
                 }
         }
         if(c == 'e' || c == 'E') {
+                mis_take(mis);
                 force_double = true;
                 int exp_sign = 1;
                 int exp = 0;
 
-                c = mis_take(mis);
+                c = mis_peek(mis);
                 if(c == '-') {
+                        mis_take(mis);
                         exp_sign = -1;
-                        c = mis_take(mis);
+                        c = mis_peek(mis);
                 } else if(c == '+') {
-                        c = mis_take(mis);
+                        mis_take(mis);
+                        c = mis_peek(mis);
                 }
                 if(c >= '0' && c <='9') {
+                        mis_take(mis);
                         exp = 10 * exp + c - '0';
-                        c = mis_take(mis);
+                        c = mis_peek(mis);
                         while(c >= '0' && c <= '9') {
+                                mis_take(mis);
                                 exp = 10 * exp + c - '0';
                                 if(exp < 0)
                                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                                c = mis_take(mis);
+                                c = mis_peek(mis);
                         }
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
