@@ -209,3 +209,5 @@ static inline char* i64toa(int64_t value, char* buffer) {
 
     return u64toa(u, buffer);
 }
+
+static const unsigned i64toa_min_buffer_length = 22;

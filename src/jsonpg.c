@@ -7,11 +7,8 @@
 
 //#define JSONPG_DEBUG
 #include "debug.c"
-#include "clzll.c"
+#include "dragonbox.c"
 #include "itoa.c"
-#include "diyfp.c"
-#include "dtoa.c"
-#include "strtod.c"
 #include "alloc.c"
 #include "input_stream.c"
 #include "output_stream.c"

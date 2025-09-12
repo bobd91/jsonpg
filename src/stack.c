@@ -12,9 +12,15 @@ static int stack_pop(Stack s)
 {
         if(s->ptr == 0)
                 return -1;
-        --s->ptr;
-
-        return 0;
+        else if(s->ptr == 1) {
+                s->ptr = 0;
+                return STACK_NONE;
+        } else {
+                --s->ptr;
+                uint16_t sp = s->ptr - 1;
+                // 0 or 1
+                return 0x01 & s->stack[sp >> 3] >> (sp & 0x07);
+        }
 }
 
 static int stack_push(Stack s, int type) 

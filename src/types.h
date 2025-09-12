@@ -36,7 +36,8 @@ typedef struct cow_stream_s             *CowStream;
 typedef struct stack_s                  *Stack;
 
 #define STACK_OBJECT 0
-#define STACK_ARRAY 1
+#define STACK_ARRAY  1
+#define STACK_NONE   2
 
 struct stack_s {
        uint16_t ptr;

@@ -14,13 +14,21 @@ static void parse_generate(Parser p, Generator g)
 
         unsigned char *bytes;
         size_t count;
-        bool is_key = false;
+
+        bool more_todo = true;
+
+        // STACK_NONE   - at the base level, not in object or array
+        // STACK_OBJECT - in an object
+        // STACK_ARRY   - in an array
+        int stack_type = STACK_NONE;
+
+        consume_whitespace(p, opt_comments);
+        Byte b = mis_peek(mis);
 
         do {
-                Byte b = mis_peek(mis);
 
-                if(is_key) {
-                        if(b == '"')
+                if(stack_type == STACK_OBJECT) {
+                         if(b == '"')
                                 count = parse_string(p, &bytes);
                         else if(opt_single_quotes && b == '\'')
                                 count = parse_sqstring(p, &bytes);
@@ -30,48 +38,56 @@ static void parse_generate(Parser p, Generator g)
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
 
                         consume_whitespace(p, opt_comments);
-                        if(mis_consume(mis, ':'))
+                        if(!mis_consume(mis, ':'))
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
-                        consume_whitespace(p, opt_comments);
                         
                         if(!jsonpg_key(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         
-                        is_key = false;
+                        consume_whitespace(p, opt_comments);
                         b = mis_peek(mis);
                 }
 
                 switch(b) {
+                case '[':
+                        stack_type = parse_start_array(p);
+                        if(!jsonpg_start_array(g)) 
+                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                        consume_whitespace(p, opt_comments);
+                        b = mis_peek(mis);
+                        if(b ==  ']') {
+                                 stack_type = parse_end_array(p);
+                                if(!jsonpg_end_array(g))
+                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                                break;
+                        }
+                        consume_whitespace(p, opt_comments);
+                        b = mis_peek(mis);
+                        continue;
+
+                case '{':
+                        stack_type = parse_start_object(p);
+                        if(!jsonpg_start_object(g)) 
+                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                        consume_whitespace(p, opt_comments);
+                        b = mis_peek(mis);
+                        if(b ==  '}') {
+                                stack_type = parse_end_object(p);
+                                if(!jsonpg_end_object(g))
+                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                                break;
+                        }
+                        consume_whitespace(p, opt_comments);
+                        b = mis_peek(mis);
+                        continue;
+
                 case '"':
                         count = parse_string(p, &bytes);
                         if(!jsonpg_string(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         break;
 
-                case '{': 
-                        parse_start_object(p);
-                        if(!jsonpg_start_object(g)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-
-                        consume_whitespace(p, opt_comments);
-                        if(mis_peek(mis) != '}') {
-                                is_key = true;
-                                continue;
-                        }
-                        break;
-
-                case '[':
-                        parse_start_array(p);
-                        if(!jsonpg_start_array(g)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-
-                        consume_whitespace(p, opt_comments);
-                        if(mis_peek(mis) != ']')
-                                continue;
-
-                        break;
-
-                case 't':
+                 case 't':
                         parse_true(p);
                         if(!jsonpg_boolean(g, true)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
@@ -86,33 +102,6 @@ static void parse_generate(Parser p, Generator g)
                 case 'n':
                         parse_null(p);
                         if(!jsonpg_null(g)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case '\'':
-                        if(!opt_single_quotes)
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
-
-                        count = parse_sqstring(p, &bytes);
-                        if(!jsonpg_string(g, bytes, count)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case '}':
-                        if(!opt_trailing_commas)
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
-
-                        parse_end_object(p);
-                        if(!jsonpg_end_object(g)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
-
-                case ']':
-                        if(!opt_trailing_commas)
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
-
-                        parse_end_array(p);
-                        if(!jsonpg_end_array(g)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         break;
 
@@ -139,40 +128,36 @@ static void parse_generate(Parser p, Generator g)
                         break;
                 }
 
-                consume_whitespace(p, opt_comments);
-                b = mis_peek(mis);
-
-                if(parser_in_object(p)) {
-                        if(b == '}') {
-                                parse_end_object(p);
-                                if(!jsonpg_end_object(g)) 
-                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                                consume_whitespace(p, opt_comments);
-                        }
-                } else if(parser_in_array(p)) {
-                        if(b == ']') {
-                                parse_end_array(p);
-                                if(!jsonpg_end_array(g)) 
-                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                                consume_whitespace(p, opt_comments);
-                        }
-                }
-                if(parser_in_any(p)) {
+                while(true) {
+                        consume_whitespace(p, opt_comments);
+                        b = mis_peek(mis);
                         if(b == ',') {
                                 mis_take(mis);
                                 consume_whitespace(p, opt_comments);
-                                is_key = parser_in_object(p);
-                                continue;
+                                b = mis_peek(mis);
+                                if(!opt_trailing_commas)
+                                        break;
+                        }
+                        if(b == '}'&& stack_type == STACK_OBJECT) {
+                                stack_type = parse_end_object(p);
+                                if(!jsonpg_end_object(g))
+                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                        } else if(b == ']' && stack_type == STACK_ARRAY) {
+                                stack_type = parse_end_array(p);
+                                if(!jsonpg_end_array(g))
+                                        throw_parse_error(p, JSONPG_ERROR_TERMINATED);
+                        } else if(opt_optional_commas) {
+                                break;
+                        } else if(stack_type == STACK_NONE) {
+                                more_todo = false;
+                                break;
+                        } else {
+                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                         }
 
-                        if(!opt_optional_commas)
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
+                }
 
-                        is_key = parser_in_object(p);
-                        continue;
-                } 
-                break;
-        } while(!mis_eof(mis));
+        } while(more_todo);
 
         if(!opt_ignore_trailing_chars) {
                 consume_whitespace(p, opt_comments);

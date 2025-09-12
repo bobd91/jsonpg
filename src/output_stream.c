@@ -236,26 +236,31 @@ static bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
 
 static bool jos_puti(JsonOutputStream jos, long integer)
 {
-        char *s = (char *)mos_reserve(jos->mos, 20);
+        static unsigned buf_len = i64toa_min_buffer_length;
+
+        char *s = (char *)mos_reserve(jos->mos, buf_len);
         if(!s)
                 return false;
         size_t count = i64toa(integer, s) - s;
 
-        ASSERT(count <= 20);
-        mos_adjust(jos->mos, 20 - count);
+        ASSERT(count <= buf_len);
+        mos_adjust(jos->mos, count - buf_len);
 
         return true;
 }
 
 static bool jos_putr(JsonOutputStream jos, double real)
 {
-        char *s = (char *)mos_reserve(jos->mos, 25);
+        static unsigned buf_len = dtoa_min_buffer_length;
+
+        char *s = (char *)mos_reserve(jos->mos, buf_len);
         if(!s)
                 return false;
-        size_t count = dtoa(real, s, 0) - s;
 
-        ASSERT(count <= 25);
-        mos_adjust(jos->mos, 25 - count);
+        size_t count = dtoa(s, real) - s;
+
+        ASSERT(count <= buf_len);
+        mos_adjust(jos->mos, count - buf_len);
 
         return true;
 }
@@ -341,8 +346,8 @@ static bool print_boolean(void *ctx, bool is_true)
 
         return jos_prefix(jos)
                         && (is_true
-                                ? jos_puts(jos, (Bytes)"true,", 5)
-                                : jos_puts(jos, (Bytes)"false,", 6));
+                                ? jos_puts(jos, (Bytes)"true", 4)
+                                : jos_puts(jos, (Bytes)"false", 5));
 }
 
 static bool print_string(void *ctx, Bytes bytes, size_t count)
@@ -371,8 +376,7 @@ static bool print_integer(void *ctx, long integer)
         JsonOutputStream jos = ctx;
 
         return jos_prefix(jos)
-                && jos_puti(jos, integer)
-                && jos_put(jos, ',');
+                && jos_puti(jos, integer);
 }
 
 static bool print_real(void *ctx, double real)
@@ -380,8 +384,7 @@ static bool print_real(void *ctx, double real)
         JsonOutputStream jos = ctx;
 
         return jos_prefix(jos)
-                && jos_putr(jos, real)
-                && jos_put(jos, ',');
+                && jos_putr(jos, real);
 }
 
 static bool print_start_object(void *ctx)

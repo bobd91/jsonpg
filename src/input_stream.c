@@ -19,9 +19,15 @@ static void mis_set_bytes(MemoryInputStream mis, Bytes bytes, size_t count)
         mis->current = 0;
 }
 
-static size_t mis_tell(MemoryInputStream mis)
+static inline size_t mis_tell(MemoryInputStream mis)
 {
         return mis->current;
+}
+
+static void mis_adjust(MemoryInputStream mis, int amount)
+{
+        ASSERT(0 <= mis->current + amount && mis->current + amount <= mis->count);
+        mis->current += amount;
 }
 
 static Bytes mis_at(MemoryInputStream mis, size_t pos)
@@ -31,36 +37,36 @@ static Bytes mis_at(MemoryInputStream mis, size_t pos)
 
         return mis->bytes + pos;
 }
-
-static size_t mis_length(MemoryInputStream mis)
-{
-        return mis->count;
-}
-
-static bool mis_eof(MemoryInputStream mis)
+//
+// static size_t mis_length(MemoryInputStream mis)
+// {
+//         return mis->count;
+// }
+//
+static inline bool mis_eof(MemoryInputStream mis)
 {
         ASSERT(mis->current <= mis->count);
 
         return mis->current == mis->count;
 }
 
-static Byte mis_peek(MemoryInputStream mis)
+static inline Byte mis_peek(MemoryInputStream mis)
 {
-        if(mis_eof(mis))
-                return '\0';
+        // if(mis_eof(mis))
+        //         return '\0';
 
         return mis->bytes[mis->current];
 }
 
-static Byte mis_take(MemoryInputStream mis)
+static inline Byte mis_take(MemoryInputStream mis)
 {
-        if(mis_eof(mis))
-                return '\0';
+        // if(mis_eof(mis))
+        //         return '\0';
 
         return mis->bytes[mis->current++];
 }
 
-static bool mis_consume(MemoryInputStream mis, Byte b)
+static inline bool mis_consume(MemoryInputStream mis, Byte b)
 {
         if(mis_peek(mis) != b)
                 return false;
