@@ -70,7 +70,6 @@ struct jsonpg_parser_s {
         Allocator                       allocator;
         uint16_t                        flags;
         MemoryInputStream               mis;
-        CowStream                       cow;
         ParseState                      state;
         DomInfo                         dom_info;
         ParseResult                     result;

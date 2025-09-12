@@ -28,17 +28,17 @@ static MemoryOutputStream mos_new(Allocator a, size_t initial_capacity)
 
         return mos;
 }
-
-static void mos_reset(MemoryOutputStream mos)
-{
-        mos->count = 0;
-}
-
-static size_t mos_length(MemoryOutputStream mos)
-{
-        return mos->count;
-}
-
+//
+// static void mos_reset(MemoryOutputStream mos)
+// {
+//         mos->count = 0;
+// }
+//
+// static size_t mos_length(MemoryOutputStream mos)
+// {
+//         return mos->count;
+// }
+//
 static Bytes mos_grow(MemoryOutputStream mos, size_t incr)
 {
         size_t size = mos->capacity 
@@ -64,7 +64,7 @@ static Bytes mos_grow(MemoryOutputStream mos, size_t incr)
         return new;
 }
 
-static Bytes mos_reserve(MemoryOutputStream mos, size_t count)
+static inline Bytes mos_reserve(MemoryOutputStream mos, size_t count)
 {
         if(count > mos->capacity - mos->count)
                 if(!mos_grow(mos, count))
@@ -75,7 +75,7 @@ static Bytes mos_reserve(MemoryOutputStream mos, size_t count)
         return str;
 }
 
-static bool mos_put(MemoryOutputStream mos, Byte chr)
+static inline bool mos_put(MemoryOutputStream mos, Byte chr)
 {
         Bytes s = mos_reserve(mos, 1);
         if(!s)
@@ -84,7 +84,7 @@ static bool mos_put(MemoryOutputStream mos, Byte chr)
         return true;
 }
 
-static bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
+static inline bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
 {
         if(count) {
                 Bytes s = mos_reserve(mos, count);
@@ -95,7 +95,7 @@ static bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
         return true;
 }
 
-static bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
+static inline bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
 {
         Bytes s = mos_reserve(mos, count);
         if(!s)
@@ -103,14 +103,14 @@ static bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
         memcpy(s, string, count);
         return true;
 }
-
-static Bytes mos_pop(MemoryOutputStream mos)
-{
-        mos->count = 0;
-        return mos->buffer;
-}
-
-static void mos_adjust(MemoryOutputStream mos, ssize_t amount)
+//
+// static Bytes mos_pop(MemoryOutputStream mos)
+// {
+//         mos->count = 0;
+//         return mos->buffer;
+// }
+//
+static inline void mos_adjust(MemoryOutputStream mos, ssize_t amount)
 {
         ASSERT(mos->count + amount >= 0);
 
@@ -147,22 +147,22 @@ static JsonOutputStream jos_new(Allocator a, unsigned indent)
         return jos;
 }
 
-static bool jos_put(JsonOutputStream jos, Byte chr)
+static inline bool jos_put(JsonOutputStream jos, Byte chr)
 {
         return mos_put(jos->mos, chr);
 }
 //
-// static bool jos_putn(JsonOutputStream jos, Byte chr, size_t count)
+// static inline bool jos_putn(JsonOutputStream jos, Byte chr, size_t count)
 // {
 //         return mos_putn(jos->mos, chr, count);
 // }
 //
-static bool jos_puts(JsonOutputStream jos, Bytes string, size_t count)
+static inline bool jos_puts(JsonOutputStream jos, Bytes string, size_t count)
 {
         return mos_puts(jos->mos, string, count);
 }
 
-static size_t find_next_escape(Bytes string, size_t count, size_t start)
+static inline size_t find_next_escape(Bytes string, size_t count, size_t start)
 {
         int i;
         for(i = start ; i < count ; i++) {
@@ -173,7 +173,7 @@ static size_t find_next_escape(Bytes string, size_t count, size_t start)
         return i;
 }
 
-static bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
+static inline bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
 {
         // gcc wont let me initialise unsigned char *[] from literal strings
         // so have to cast later 
@@ -234,7 +234,7 @@ static bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
         return mos_puts(mos, string + pmos1, pmos2 - pmos1);
 }
 
-static bool jos_puti(JsonOutputStream jos, long integer)
+static inline bool jos_puti(JsonOutputStream jos, long integer)
 {
         static unsigned buf_len = i64toa_min_buffer_length;
 
@@ -249,7 +249,7 @@ static bool jos_puti(JsonOutputStream jos, long integer)
         return true;
 }
 
-static bool jos_putr(JsonOutputStream jos, double real)
+static inline bool jos_putr(JsonOutputStream jos, double real)
 {
         static unsigned buf_len = dtoa_min_buffer_length;
 
@@ -265,7 +265,7 @@ static bool jos_putr(JsonOutputStream jos, double real)
         return true;
 }
 
-static bool jos_indent(JsonOutputStream jos)
+static inline bool jos_indent(JsonOutputStream jos)
 {
         // Avoid leading newline
         if(jos->nl) {
@@ -278,7 +278,7 @@ static bool jos_indent(JsonOutputStream jos)
         return mos_putn(jos->mos, ' ', jos->indent * jos->level);
 }
 
-static bool jos_prefix(JsonOutputStream jos)
+static inline bool jos_prefix(JsonOutputStream jos)
 {
         if(!jos->key) {
                 if(jos->comma && !mos_put(jos->mos, ','))
@@ -292,7 +292,7 @@ static bool jos_prefix(JsonOutputStream jos)
         return true;
 }
 
-static bool jos_prefix_start(JsonOutputStream jos)
+static inline bool jos_prefix_start(JsonOutputStream jos)
 {
         if(!jos_prefix(jos))
                 return false;
@@ -302,7 +302,7 @@ static bool jos_prefix_start(JsonOutputStream jos)
         return true;
 }
 
-static bool jos_prefix_end(JsonOutputStream jos)
+static inline bool jos_prefix_end(JsonOutputStream jos)
 {
         jos->level--;
         ASSERT(jos->level >= 0);
@@ -317,7 +317,7 @@ static bool jos_prefix_end(JsonOutputStream jos)
         return true;
 }
 
-static bool jos_key_suffix(JsonOutputStream jos)
+static inline bool jos_key_suffix(JsonOutputStream jos)
 {
         if(!mos_put(jos->mos, ':'))
                 return false;
@@ -332,7 +332,7 @@ static bool jos_key_suffix(JsonOutputStream jos)
 
 
 
-static bool print_null(void *ctx)
+static inline bool print_null(void *ctx)
 {
         JsonOutputStream jos = ctx;
 
@@ -340,7 +340,7 @@ static bool print_null(void *ctx)
                 && jos_puts(jos, (Bytes)"null", 4);
 }
 
-static bool print_boolean(void *ctx, bool is_true)
+static inline bool print_boolean(void *ctx, bool is_true)
 {
         JsonOutputStream jos = ctx;
 
@@ -350,7 +350,7 @@ static bool print_boolean(void *ctx, bool is_true)
                                 : jos_puts(jos, (Bytes)"false", 5));
 }
 
-static bool print_string(void *ctx, Bytes bytes, size_t count)
+static inline bool print_string(void *ctx, Bytes bytes, size_t count)
 {
         JsonOutputStream jos = ctx;
 
@@ -360,7 +360,7 @@ static bool print_string(void *ctx, Bytes bytes, size_t count)
                 && jos_put(jos, '"');
 }
 
-static bool print_key(void *ctx, Bytes bytes, size_t count)
+static inline bool print_key(void *ctx, Bytes bytes, size_t count)
 {
         JsonOutputStream jos = ctx;
 
@@ -371,7 +371,7 @@ static bool print_key(void *ctx, Bytes bytes, size_t count)
                 && jos_key_suffix(jos);
 }
 
-static bool print_integer(void *ctx, long integer)
+static inline bool print_integer(void *ctx, long integer)
 {
         JsonOutputStream jos = ctx;
 
@@ -379,7 +379,7 @@ static bool print_integer(void *ctx, long integer)
                 && jos_puti(jos, integer);
 }
 
-static bool print_real(void *ctx, double real)
+static inline bool print_real(void *ctx, double real)
 {
         JsonOutputStream jos = ctx;
 
@@ -387,7 +387,7 @@ static bool print_real(void *ctx, double real)
                 && jos_putr(jos, real);
 }
 
-static bool print_start_object(void *ctx)
+static inline bool print_start_object(void *ctx)
 {
         JsonOutputStream jos = ctx;
 
@@ -395,7 +395,7 @@ static bool print_start_object(void *ctx)
                 && jos_put(jos, '{');
 }
 
-static bool print_end_object(void *ctx)
+static inline bool print_end_object(void *ctx)
 {
         JsonOutputStream jos = ctx;
 
@@ -403,7 +403,7 @@ static bool print_end_object(void *ctx)
                 && jos_put(jos, '}');
 }
 
-static bool print_start_array(void *ctx)
+static inline bool print_start_array(void *ctx)
 {
         JsonOutputStream jos = ctx;
 
@@ -411,7 +411,7 @@ static bool print_start_array(void *ctx)
                 && jos_put(jos, '[');
 }
 
-static bool print_end_array(void *ctx)
+static inline bool print_end_array(void *ctx)
 {
         JsonOutputStream jos = ctx;
 

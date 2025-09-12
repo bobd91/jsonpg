@@ -76,8 +76,8 @@ static JsonType set_result_error(Parser p, ErrorCode code)
 {
         p->result.type = JSONPG_ERROR;
         p->result.error.code = code;
-        p->result.error.at = p->mis->bytes
-                ? p->mis->current
+        p->result.error.at = p->mis->start
+                ? mis_tell(p->mis)
                 : 0;
 
 #ifdef JSONPG_DEBUG

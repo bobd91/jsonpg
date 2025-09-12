@@ -31,7 +31,7 @@ static void throw_parse_error_at(Parser p, ErrorCode error_code, size_t at)
 [[noreturn]]
 static void throw_parse_error(Parser p, ErrorCode error_code)
 {
-        size_t at = p->mis->bytes ? p->mis->current : 0;
+        size_t at = p->mis->start ? mis_tell(p->mis) : 0;
 
         throw_parse_error_at(p, error_code, at);
 }
@@ -187,10 +187,10 @@ static unsigned parse_escape(Parser p)
         }
 }
 
-static void mis_consume_whitespace(MemoryInputStream mis)
+static Byte mis_consume_whitespace(MemoryInputStream mis)
 {
         Byte c;
-        Bytes bytes = mis->bytes + mis->current;
+        Bytes bytes = mis->read;
         Bytes ptr = bytes;
         while(((c = *bytes++) == ' ' 
                                 || c == '\n' 
@@ -200,173 +200,141 @@ static void mis_consume_whitespace(MemoryInputStream mis)
                 ;
         mis_adjust(mis, bytes - 1 - ptr);
 
+        return c;
+
         // while((c = mis_peek(mis)) == ' ' || c == '\n' || c == '\r' || c== '\t')
         //         mis_take(mis);
 }
 
-void consume_whitespace(Parser p, bool allow_comments)
+static Byte consume_whitespace(Parser p, bool allow_comments)
 {
         const MemoryInputStream mis = p->mis;
         Byte c;
 
         if(!allow_comments) {
-                mis_consume_whitespace(mis);
-                return;
+                return mis_consume_whitespace(mis);
         }
 
         while(true) {
-                mis_consume_whitespace(mis);
+                c = mis_consume_whitespace(mis);
 
-                if(mis_consume(mis, '/')) {
-                        c = mis_peek(mis);
-                        if(c == '*') {
-                                mis_take(mis);
-                                while(true) {
-                                        if(mis_consume(mis, '*')) {
-                                                if(mis_consume(mis, '/'))
-                                                        break;
-                                        } else if(mis_eof(mis)) {
-                                                return;
-                                        } else {
-                                                mis_take(mis);
-                                        }
-                                }
-                        } else if(c == '/') {
-                                while(mis_take(mis) != '\n')
-                                        if(mis_eof(mis))
-                                                return;
-                                        ;
-                        } else {        
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
+                if(c != '/')
+                        return c;
+
+                mis_take(mis);
+                c = mis_peek(mis);
+                if(c == '*') {
+                        mis_take(mis);
+                        while(true) {
+                                c = mis_find(mis, '*');
+                                if(c == '*' && mis_consume(mis, '/'))
+                                        break;
+                                else if(c == '\0')
+                                        return '\0';
                         }
-                        continue;
-                } else {
-                        break;
+                } else if(c == '/') {
+                        c = mis_find(mis, '\n');
+                        if(c == '\0')
+                                return '\0';
+                } else {        
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                 }
         }
 }
 
-static void parse_string_to_cow(Parser p, CowStream cow, Byte terminator)
+static size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *bytes)
 {
         const MemoryInputStream mis = p->mis;
+
+        mis_string_start(mis);
 
         while(true) {
                 //copy_safe_chars(p->is, os);
                 
-                unsigned char c = mis_peek(mis);
-                if(c == '\\') {
-                        Bytes s = cow_reserve(cow, 4);
+                Byte c = mis_peek(mis);
+                if(c == terminator) {
+                        return mis_string_complete(mis, bytes);
+                } else if(c == '\\') {
+                        mis_string_update(mis);
                         unsigned codepoint = parse_escape(p);
-                        if(!s)
-                                throw_parse_error(p, JSONPG_ERROR_ALLOC);
-                        int count = utf8_encode(codepoint, s);
-                        if(count == -1)
-                                throw_parse_error(p, JSONPG_ERROR_UTF8);
-                        cow_adjust(cow, count - 4);
-                } else if(c == terminator) {
-                        if(!cow_finalize(cow))
-                                throw_parse_error(p, JSONPG_ERROR_ALLOC);
-                        mis_take(mis);
-                        return;
-                } else if(c < 0x20) {
-                        throw_parse_error(p, JSONPG_ERROR_INVALID);
+                        utf8_encode(codepoint, mis_writer(mis));
+                        mis_string_restart(mis);
                 } else if(c >= 0x80) {
                         if(-1 == utf8_validate_sequence(mis))
                                 throw_parse_error(p, JSONPG_ERROR_UTF8);
+                } else if(c < 0x20) {
+                        throw_parse_error(p, JSONPG_ERROR_INVALID);
                 } else {
                         mis_take(mis);
                 }
         }
 }
 
-static void parse_nqstring_to_cow(Parser p, CowStream cow)
+static size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
 {
         const MemoryInputStream mis = p->mis;
+
+        mis_string_start(mis);
 
         while(true) {
                 //copy_safe_chars(p->is, os);
                 
-                unsigned char c = mis_peek(mis);
+                Byte c = mis_peek(mis);
                 if(c == '\\') {
-                        mis_take(mis);
-                        // no quote escapes the next char so just skip backslash
-                        // But that puts us out of sync with cow so
-                        // reserve 0 to trigger cow write
-                        cow_reserve(cow, 0);
+                        mis_string_update(mis);
+                        mis_byte_copy(mis);
+                        mis_string_restart(mis);
                 } else if(c == ' ' || c == '\n' || c == '\r' || c == '\t') {
-                        if(!cow_finalize(cow))
-                                throw_parse_error(p, JSONPG_ERROR_ALLOC);
-                        mis_take(mis);
-                        return;
-                } else if(c < 0x20) {
-                        throw_parse_error(p, JSONPG_ERROR_INVALID);
+                        return mis_string_complete(mis, bytes);
                 } else if(c >= 0x80) {
                         if(-1 == utf8_validate_sequence(p->mis))
                                 throw_parse_error(p, JSONPG_ERROR_UTF8);
+                } else if(c < 0x20) {
+                        throw_parse_error(p, JSONPG_ERROR_INVALID);
                 } else {
                         mis_take(mis);
                 }
         }
-}
-
-static size_t parse_string_terminator(Parser p, Bytes *bytes, Byte terminator)
-{
-        const CowStream cow = p->cow;
-        cow_start(cow);
-
-        parse_string_to_cow(p, cow, terminator);
-        size_t length = cow_length(cow);
-        Bytes str = cow_pop(cow);
-        *bytes = str;
-        return length;
 }
 
 static size_t parse_string(Parser p, Bytes *bytes)
 {
         ASSERT(mis_peek(p->mis) == '"');
+
         mis_take(p->mis); // "
-        return parse_string_terminator(p, bytes, '"');
+        return parse_string_in_stream(p, '"', bytes);
 }
 
 static size_t parse_sqstring(Parser p, Bytes *bytes)
 {
         ASSERT(mis_peek(p->mis) == '\'');
+
         mis_take(p->mis); // '
-        return parse_string_terminator(p, bytes, '\'');
+        return parse_string_in_stream(p, '\'', bytes);
 }
 
 static size_t parse_nqstring(Parser p, Bytes *bytes)
 {
-        const CowStream cow = p->cow;
-        cow_start(cow);
-
-        parse_nqstring_to_cow(p, cow);
-        size_t length = cow_length(cow);
-        Bytes str = cow_pop(cow);
-        *bytes = str;
-        return length;
+        return parse_nqstring_in_stream(p, bytes);
 }
 
 static JsonType parse_number(Parser p, double *real_result, long *integer_result)
 {
-        Byte internal_bytes[64];
-
         // Max digits for long,
         // double is 15-17 but we will lose those when converting
         static int max_sig_digits = 19;
 
+        // Non-digit chars of interest
+        static Byte minus = ((Byte)'-') - 0x30;
+        static Byte point = ((Byte)'.') - 0x30;
+        static Byte lower_e = ((Byte)'e') - 0x30;
+        static Byte upper_e = ((Byte)'E') - 0x30;
+        static Byte plus = ((Byte)'+') - 0x30;
+
         const MemoryInputStream mis = p->mis;
 
-        Bytes bytes = mis->bytes + mis->current;
-        int input_size = mis->count - mis->current;
-        if(input_size < 64) {
-                memcpy(internal_bytes, bytes, input_size);
-                bytes = internal_bytes;
-                bytes[input_size] = '\0';
-        }
+        Bytes bytes = mis->read;
         Bytes ptr = bytes;
-
-
 
         // If fast parsing fails might need to call
         // strtod, which needs to start from the beginning
@@ -378,86 +346,83 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         int64_t exponent = 0;
         int sig_digits = 0;
 
-        Byte c = *bytes++; //mis_take(mis);
+        Byte c = (*bytes++) - 0x30; //mis_take(mis);
 
-        if(c == '-') {
+        if(c == minus) {
                 negative = true;
-                c = *bytes++; //mis_take(mis);
+                c = (*bytes++) - 0x30; //mis_take(mis);
         }
-        if(c >= '0' && c <= '9') {
-                sum = c - '0';
-                if(sum)
-                        sig_digits++;
+        if(c < 10) {
+                sum = c;
+                sig_digits += (sum != 0);
         } else {
                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
         }
 
-        c = *bytes; //mis_peek(mis);
+        c = (*bytes) - 0x30; //mis_peek(mis);
         if(sum) {
-                while(c >= '0' && c <= '9') {
+                while(c < 10) {
                         bytes++; //mis_take(mis);
                         if(sig_digits++ < max_sig_digits) {
-                                sum = sum * 10 + c - '0';
+                                sum = sum * 10 + c;
                         } else {
                                 exponent++;
                         }
-                        c = *bytes; //mis_peek(mis);
+                        c = (*bytes) - 0x30; //mis_peek(mis);
                 }
         }
-        if(c == '.') {
+        if(c == point) {
                 bytes++; //mis_take(mis);
                 force_double = true;
 
-                c = *bytes; //mis_peek(mis);
-                if(c >= '0' && c <= '9') {
+                c = (*bytes) - 0x30; //mis_peek(mis);
+                if(c < 10) {
                         bytes++; //mis_take(mis);
                         if(sig_digits < max_sig_digits) {
-                                sum = 10 * sum + c - '0';
+                                sum = 10 * sum + c;
                                 exponent--;
-                                if(sum)
-                                        sig_digits++;
+                                sig_digits += (sum != 0);
                         }
-                        c = *bytes; //mis_peek(mis);
+                        c = (*bytes) - 0x30; //mis_peek(mis);
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
                 }
 
-                while(c >= '0' && c <= '9') {
+                while(c < 10) {
                         bytes++; //mis_take(mis);
                         if(sig_digits < max_sig_digits) {
-                                sum = 10 * sum + c - '0';
+                                sum = 10 * sum + c;
                                 exponent--;
-                                if(sum)
-                                        sig_digits++;
+                                sig_digits += (sum != 0);
                         }
-                        c = *bytes; //mis_peek(mis);
+                        c = (*bytes) - 0x30; //mis_peek(mis);
                 }
         }
-        if(c == 'e' || c == 'E') {
+        if(c == lower_e || c == upper_e) {
                 bytes++; //mis_take(mis);
                 force_double = true;
                 int exp_sign = 1;
                 int exp = 0;
 
-                c = *bytes; //mis_peek(mis);
-                if(c == '-') {
+                c = (*bytes) - 0x30; //mis_peek(mis);
+                if(c == minus) {
                         bytes++; //mis_take(mis);
                         exp_sign = -1;
-                        c = *bytes; //mis_peek(mis);
-                } else if(c == '+') {
+                        c = (*bytes) - 0x30; //mis_peek(mis);
+                } else if(c == plus) {
                         bytes++; //mis_take(mis);
-                        c = *bytes; //mis_peek(mis);
+                        c = (*bytes) - 0x30; //mis_peek(mis);
                 }
-                if(c >= '0' && c <='9') {
+                if(c < 10) {
                         bytes++; //mis_take(mis);
-                        exp = 10 * exp + c - '0';
-                        c = *bytes; //mis_peek(mis);
-                        while(c >= '0' && c <= '9') {
+                        exp = 10 * exp + c;
+                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        while(c < 10) {
                                 bytes++; //mis_take(mis);
-                                exp = 10 * exp + c - '0';
+                                exp = 10 * exp + c;
                                 if(exp > 1000)
                                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                                c = *bytes; //mis_peek(mis);
+                                c = (*bytes) - 0x30; //mis_peek(mis);
                         }
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
@@ -507,7 +472,6 @@ static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
         b[count] = '\0';
 
         mis_set_bytes(p->mis, b/*ytes + skip*/, count/* - skip*/);
-        cow_start(p->cow);
 }
 
 static void parser_set_dom_info(Parser p, DomInfo di)
@@ -537,10 +501,6 @@ Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
 
         p->mis = mis_new(a);
         if(!p->mis)
-                return NULL;
-
-        p->cow = cow_new(a, p->mis);
-        if(!p->cow)
                 return NULL;
 
         p->dom_info = (DomInfo){};

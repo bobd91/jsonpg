@@ -12,7 +12,7 @@ static void parse_generate(Parser p, Generator g)
         const bool opt_optional_commas = flags & JSONPG_FLAG_OPTIONAL_COMMAS;
         const bool opt_ignore_trailing_chars = flags & JSONPG_FLAG_IGNORE_TRAILING_CHARS;
 
-        unsigned char *bytes;
+        Bytes bytes;
         size_t count;
 
         bool more_todo = true;
@@ -22,8 +22,7 @@ static void parse_generate(Parser p, Generator g)
         // STACK_ARRY   - in an array
         int stack_type = STACK_NONE;
 
-        consume_whitespace(p, opt_comments);
-        Byte b = mis_peek(mis);
+        Byte b = consume_whitespace(p, opt_comments);
 
         do {
 
@@ -37,15 +36,15 @@ static void parse_generate(Parser p, Generator g)
                         else
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
 
-                        consume_whitespace(p, opt_comments);
+                        b = consume_whitespace(p, opt_comments);
                         if(!mis_consume(mis, ':'))
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
-                        
+
+
                         if(!jsonpg_key(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                 }
 
                 switch(b) {
@@ -53,32 +52,28 @@ static void parse_generate(Parser p, Generator g)
                         stack_type = parse_start_array(p);
                         if(!jsonpg_start_array(g)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                         if(b ==  ']') {
-                                 stack_type = parse_end_array(p);
+                                stack_type = parse_end_array(p);
                                 if(!jsonpg_end_array(g))
                                         throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                                 break;
                         }
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                         continue;
 
                 case '{':
                         stack_type = parse_start_object(p);
                         if(!jsonpg_start_object(g)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                         if(b ==  '}') {
                                 stack_type = parse_end_object(p);
                                 if(!jsonpg_end_object(g))
                                         throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                                 break;
                         }
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                         continue;
 
                 case '"':
@@ -129,12 +124,10 @@ static void parse_generate(Parser p, Generator g)
                 }
 
                 while(true) {
-                        consume_whitespace(p, opt_comments);
-                        b = mis_peek(mis);
+                        b = consume_whitespace(p, opt_comments);
                         if(b == ',') {
                                 mis_take(mis);
-                                consume_whitespace(p, opt_comments);
-                                b = mis_peek(mis);
+                                b = consume_whitespace(p, opt_comments);
                                 if(!opt_trailing_commas)
                                         break;
                         }

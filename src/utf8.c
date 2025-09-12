@@ -66,16 +66,16 @@ static bool is_valid_codepoint(int cp)
 }
 
 /*
- * Writes a Unicode codepoint as utf-8 bytes to the provided byte array
+ * Writes a Unicode codepoint as utf-8 bytes to the provided 
+ * byte array point
  * The provided byte array must have space for up to 4 characters
  *
  * The codepoint should be valid before calling this function
  *
- * Returns number of bytes written
- * Will return -1 on non-debug build if an invalid codepoint is supplied
+ * Will fail silently on non-debug build if an invalid codepoint is supplied
  * In a debug build it will fail an assertion
  */      
-static int utf8_encode(int cp, Bytes bytes) 
+static void utf8_encode(int cp, Bytes *bytes) 
 {
         int shift = 0;
         Byte lead_byte;
@@ -90,7 +90,7 @@ static int utf8_encode(int cp, Bytes bytes)
         } else if(is_surrogate(cp)) {
                 // UTF-16 surrogates are not legal Unicode
                 assert(0 && "Codepoint invalid: in surrogate range");
-                return -1;
+                return;
         } else if(cp <= _3_BYTE_MAX) {
                 // 3 byte UTF8, byte 1 is 1110 and highest 4 bits
                 shift = 12;
@@ -104,17 +104,15 @@ static int utf8_encode(int cp, Bytes bytes)
         } else {
                 // value to large to be legal Unicode
                 assert(0 && "Codepoint invalid: above maximum value");
-                return -1; // wont get here but ...
+                return; // wont get here but ...
         }
-        int pos = 0;
-        bytes[pos++] = lead_byte;
+        *((*bytes)++) = lead_byte;
         // Now any continuation bytes
         // high two bits '10' and next highest 6 bits from codepoint 
         while(shift > 0) {
                 shift -= 6;
-                bytes[pos++] = CONTINUATION_BYTE | LO_6_BITS(cp >> shift);
+                *((*bytes)++) = CONTINUATION_BYTE | LO_6_BITS(cp >> shift);
         }
-        return pos;
 }
 
 /*

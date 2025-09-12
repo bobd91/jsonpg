@@ -12,7 +12,6 @@
 #include "alloc.c"
 #include "input_stream.c"
 #include "output_stream.c"
-#include "cow_stream.c"
 #include "utf8.c"
 #include "stack.c"
 #include "error.c"
