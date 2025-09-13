@@ -21,11 +21,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---------------------------------------
+src/dragonbox.c
 
-Some code has been taken from the RapidJSON C++ project at https://github.com/Tencent/rapidjson/
-and modified from C++ to C
+a C rewrite of https://github.com/abolz/Drachennest/src/dragonbox.cc
 
-The RapidJSON C++ project license reads:
+Copyright 2020 Junekey Jeon
+Copyright 2020 Alexander Bolz
+
+Distributed under the Boost Software License, Version 1.0.
+(https://www.boost.org/LICENSE_1_0.txt)
+
+---------------------------------------
+src/fast_double_parser.h
+
+a C rewrite of https://github.com/lemire/fast_double_parser
+
+Copyright (c) Daniel Lemire
+
+Apache LICENSE
+https://github.com/lemire/fast_double_parser/blob/master/LICENSE
+
+---------------------------------------
+src/itoa.c 
+
+a C rewrite of itoa.h from the RapidJSON C++ project at https://github.com/Tencent/rapidjson/
 
 Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.
 
@@ -40,6 +59,7 @@ CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
 ---------------------------------------
+Test Files
 
 Test files have been taken from JSONTestSuite project at https://github.com/nst/JSONTestSuite
 
