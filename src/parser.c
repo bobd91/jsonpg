@@ -6,12 +6,12 @@
 
 #define MIN_STACK_SIZE 1024
 
-static bool parser_in_object(Parser p)
+static inline bool parser_in_object(Parser p)
 {
         return stack_peek(&p->stack) == STACK_OBJECT;
 }
 
-static bool parser_in_array(Parser p)
+static inline bool parser_in_array(Parser p)
 {
         return stack_peek(&p->stack) == STACK_ARRAY;
 }
@@ -36,7 +36,7 @@ static void throw_parse_error(Parser p, ErrorCode error_code)
         throw_parse_error_at(p, error_code, at);
 }
 
-static int parse_start_object(Parser p)
+static inline int parse_start_object(Parser p)
 {
         ASSERT(mis_peek(p->mis) == '{');
 
@@ -46,7 +46,7 @@ static int parse_start_object(Parser p)
         return STACK_OBJECT;
 }
 
-static int parse_end_object(Parser p)
+static inline int parse_end_object(Parser p)
 {
         ASSERT(mis_peek(p->mis) == '}');
         ASSERT(stack_peek(&p->stack) == STACK_OBJECT);
@@ -59,7 +59,7 @@ static int parse_end_object(Parser p)
         return type;
 }
 
-static int parse_start_array(Parser p)
+static inline int parse_start_array(Parser p)
 {
         ASSERT(mis_peek(p->mis) == '[');
 
@@ -69,7 +69,7 @@ static int parse_start_array(Parser p)
         return STACK_ARRAY;
 }
 
-static int  parse_end_array(Parser p)
+static inline int  parse_end_array(Parser p)
 {
         ASSERT(mis_peek(p->mis) == ']');
         ASSERT(stack_peek(&p->stack) == STACK_ARRAY);
@@ -82,7 +82,7 @@ static int  parse_end_array(Parser p)
         return type;
 }
 
-static void parse_true(Parser p)
+static inline void parse_true(Parser p)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -95,7 +95,7 @@ static void parse_true(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static void parse_false(Parser p)
+static inline void parse_false(Parser p)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -109,7 +109,7 @@ static void parse_false(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static void parse_null(Parser p)
+static inline void parse_null(Parser p)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -122,7 +122,7 @@ static void parse_null(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static unsigned parse_hex4(Parser p, size_t esc_offset)
+static inline unsigned parse_hex4(Parser p, size_t esc_offset)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -187,26 +187,18 @@ static unsigned parse_escape(Parser p)
         }
 }
 
-static Byte mis_consume_whitespace(MemoryInputStream mis)
+static inline Byte mis_consume_whitespace(MemoryInputStream mis)
 {
         Byte c;
-        Bytes bytes = mis->read;
-        Bytes ptr = bytes;
-        while(((c = *bytes++) == ' ' 
-                                || c == '\n' 
-                                || c == '\r' 
-                                || c == '\t')
-                      )
-                ;
-        mis_adjust(mis, bytes - 1 - ptr);
+
+        while((c = mis_peek(mis)) == ' ' || c == '\n' || c == '\r' || c== '\t')
+                 mis_take(mis);
 
         return c;
 
-        // while((c = mis_peek(mis)) == ' ' || c == '\n' || c == '\r' || c== '\t')
-        //         mis_take(mis);
 }
 
-static Byte consume_whitespace(Parser p, bool allow_comments)
+static inline Byte consume_whitespace(Parser p, bool allow_comments)
 {
         const MemoryInputStream mis = p->mis;
         Byte c;
@@ -242,7 +234,7 @@ static Byte consume_whitespace(Parser p, bool allow_comments)
         }
 }
 
-static size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *bytes)
+static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *bytes)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -270,7 +262,7 @@ static size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *bytes)
         }
 }
 
-static size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
+static inline size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -297,7 +289,7 @@ static size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
         }
 }
 
-static size_t parse_string(Parser p, Bytes *bytes)
+static inline size_t parse_string(Parser p, Bytes *bytes)
 {
         ASSERT(mis_peek(p->mis) == '"');
 
@@ -305,7 +297,7 @@ static size_t parse_string(Parser p, Bytes *bytes)
         return parse_string_in_stream(p, '"', bytes);
 }
 
-static size_t parse_sqstring(Parser p, Bytes *bytes)
+static inline size_t parse_sqstring(Parser p, Bytes *bytes)
 {
         ASSERT(mis_peek(p->mis) == '\'');
 
@@ -313,7 +305,7 @@ static size_t parse_sqstring(Parser p, Bytes *bytes)
         return parse_string_in_stream(p, '\'', bytes);
 }
 
-static size_t parse_nqstring(Parser p, Bytes *bytes)
+static inline size_t parse_nqstring(Parser p, Bytes *bytes)
 {
         return parse_nqstring_in_stream(p, bytes);
 }
@@ -322,23 +314,27 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
 {
         // Max digits for long,
         // double is 15-17 but we will lose those when converting
-        static int max_sig_digits = 19;
+        static const int max_sig_digits = 19;
+
+        // By taking ascii '0' from unsigned char
+        // We can test for digits with a single comparison (<10)
+        // Rather than two ('0' <= x && x <= '9')
 
         // Non-digit chars of interest
-        static Byte minus = ((Byte)'-') - 0x30;
-        static Byte point = ((Byte)'.') - 0x30;
-        static Byte lower_e = ((Byte)'e') - 0x30;
-        static Byte upper_e = ((Byte)'E') - 0x30;
-        static Byte plus = ((Byte)'+') - 0x30;
+        static const Byte minus = ((Byte)'-') - '0';
+        static const Byte point = ((Byte)'.') - '0';
+        static const Byte lower_e = ((Byte)'e') - '0';
+        static const Byte upper_e = ((Byte)'E') - '0';
+        static const Byte plus = ((Byte)'+') - '0';
 
         const MemoryInputStream mis = p->mis;
 
-        Bytes bytes = mis->read;
-        Bytes ptr = bytes;
+        // Bytes bytes = mis->read;
+        // const Bytes ptr = bytes;
 
         // If fast parsing fails might need to call
         // strtod, which needs to start from the beginning
-        //size_t start_pos = mis_tell(mis);
+        size_t start_pos = mis_tell(mis);
 
         bool force_double = false;
         bool negative = false;
@@ -346,11 +342,11 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         int64_t exponent = 0;
         int sig_digits = 0;
 
-        Byte c = (*bytes++) - 0x30; //mis_take(mis);
+        Byte c = mis_take(mis) - '0';
 
         if(c == minus) {
                 negative = true;
-                c = (*bytes++) - 0x30; //mis_take(mis);
+                c = mis_take(mis) - '0';
         }
         if(c < 10) {
                 sum = c;
@@ -359,70 +355,70 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
         }
 
-        c = (*bytes) - 0x30; //mis_peek(mis);
+        c = mis_peek(mis) - '0';
         if(sum) {
                 while(c < 10) {
-                        bytes++; //mis_take(mis);
+                        mis_take(mis);
                         if(sig_digits++ < max_sig_digits) {
                                 sum = sum * 10 + c;
                         } else {
                                 exponent++;
                         }
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        c = mis_peek(mis) - '0';
                 }
         }
         if(c == point) {
-                bytes++; //mis_take(mis);
+                mis_take(mis);
                 force_double = true;
 
-                c = (*bytes) - 0x30; //mis_peek(mis);
+                c = mis_peek(mis) - '0';
                 if(c < 10) {
-                        bytes++; //mis_take(mis);
+                        mis_take(mis);
                         if(sig_digits < max_sig_digits) {
                                 sum = 10 * sum + c;
                                 exponent--;
                                 sig_digits += (sum != 0);
                         }
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        c = mis_peek(mis) - '0';
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
                 }
 
                 while(c < 10) {
-                        bytes++; //mis_take(mis);
+                        mis_take(mis); //mis_take(mis);
                         if(sig_digits < max_sig_digits) {
                                 sum = 10 * sum + c;
                                 exponent--;
                                 sig_digits += (sum != 0);
                         }
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        c = mis_peek(mis) - '0';
                 }
         }
         if(c == lower_e || c == upper_e) {
-                bytes++; //mis_take(mis);
+                mis_take(mis); //mis_take(mis);
                 force_double = true;
                 int exp_sign = 1;
                 int exp = 0;
 
-                c = (*bytes) - 0x30; //mis_peek(mis);
+                c = mis_peek(mis) - '0';
                 if(c == minus) {
-                        bytes++; //mis_take(mis);
+                        mis_take(mis);
                         exp_sign = -1;
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        c = mis_peek(mis) - '0';
                 } else if(c == plus) {
-                        bytes++; //mis_take(mis);
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        mis_take(mis);
+                        c = mis_peek(mis) - '0';
                 }
                 if(c < 10) {
-                        bytes++; //mis_take(mis);
+                        mis_take(mis);
                         exp = 10 * exp + c;
-                        c = (*bytes) - 0x30; //mis_peek(mis);
+                        c = mis_peek(mis) - '0';
                         while(c < 10) {
-                                bytes++; //mis_take(mis);
+                                mis_take(mis);
                                 exp = 10 * exp + c;
                                 if(exp > 1000)
                                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                                c = (*bytes) - 0x30; //mis_peek(mis);
+                                c = mis_peek(mis) - '0';
                         }
                 } else {
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
@@ -444,17 +440,14 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                         *real_result = compute_float_64(exponent, sum, negative, &success);
                 }
                 if(!success) {
-                        const char *start = (char *)ptr; //(char *)mis_at(mis, start_pos);
+                        const char *start = (char *)mis_at(mis, start_pos);
                         const char *end = parse_float_strtod(start, real_result);
                         if(!end)
                                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                        mis_adjust(mis, end - start); // - mis_tell(mis));
-                } else {
-                        mis_adjust(mis, bytes - ptr);
+                        mis_adjust(mis, (Bytes)end);
                 }
                 return JSONPG_REAL;
         } else {
-                mis_adjust(mis, bytes - ptr);
                 *integer_result = negative ? -sum : sum;
                 return JSONPG_INTEGER;
         }
@@ -479,7 +472,7 @@ static void parser_set_dom_info(Parser p, DomInfo di)
         p->dom_info = di;
 }
 
-static uint16_t get_stack_size(uint16_t stack_size)
+static inline uint16_t get_stack_size(uint16_t stack_size)
 {
         return stack_size > MIN_STACK_SIZE ? stack_size : MIN_STACK_SIZE;
 }

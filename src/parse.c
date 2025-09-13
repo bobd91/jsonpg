@@ -37,13 +37,14 @@ static void parse_generate(Parser p, Generator g)
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
 
                         b = consume_whitespace(p, opt_comments);
-                        if(!mis_consume(mis, ':'))
+                        if(b != ':')
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
 
 
                         if(!jsonpg_key(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         
+                        mis_take(mis); // ':'
                         b = consume_whitespace(p, opt_comments);
                 }
 
@@ -159,7 +160,7 @@ static void parse_generate(Parser p, Generator g)
         }
 }
 
-ParseResult parse(Parser p, Generator g)
+static ParseResult parse(Parser p, Generator g)
 {
         ParseResult val;
 

@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-static int stack_peek(Stack s)
+static inline int stack_peek(Stack s)
 {
         if(s->ptr == 0)
                 return -1;
@@ -8,7 +8,7 @@ static int stack_peek(Stack s)
         return 0x01 & s->stack[sp >> 3] >> (sp & 0x07);
 }
 
-static int stack_pop(Stack s) 
+static inline int stack_pop(Stack s) 
 {
         if(s->ptr == 0)
                 return -1;
@@ -23,7 +23,7 @@ static int stack_pop(Stack s)
         }
 }
 
-static int stack_push(Stack s, int type) 
+static inline int stack_push(Stack s, int type) 
 {
         uint16_t sp = s->ptr;
         if(sp >= s->size) 

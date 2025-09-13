@@ -12,7 +12,16 @@ struct memory_input_stream_s {
 
 static MemoryInputStream mis_new(Allocator a)
 {
-        return allocator_alloc(a, sizeof(struct memory_input_stream_s));
+        MemoryInputStream mis = allocator_alloc(a, sizeof(struct memory_input_stream_s));
+
+        mis->count = 0;
+        mis->start = NULL;
+        mis->string = NULL;
+        mis->read = NULL;
+        mis->write = NULL;
+        mis->mark = NULL;
+
+        return mis;
 }
 
 static void mis_set_bytes(MemoryInputStream mis, Bytes bytes, size_t count)
@@ -29,10 +38,10 @@ static inline size_t mis_tell(MemoryInputStream mis)
         return mis->read - mis->start;
 }
 
-static inline void mis_adjust(MemoryInputStream mis, int amount)
+static inline void mis_adjust(MemoryInputStream mis, Bytes ptr)
 {
-        ASSERT(0 <= mis_tell(mis) + amount && mis_tell(mis) + amount <= mis->count);
-        mis->read += amount;
+        ASSERT(0 <= ptr - mis->start && ptr - mis->start <= mis->count);
+        mis->read = ptr;
 }
 
 static inline Bytes mis_at(MemoryInputStream mis, size_t pos)

@@ -55,12 +55,12 @@ int replacement_length = 3;
 #define IS_4_BYTE_LEADER(x) (_4_BYTE_LEADER == HI_5_BITS(x))
 #define IS_CONTINUATION(x)  (CONTINUATION_BYTE == HI_2_BITS(x))
 
-static bool is_surrogate(int cp) 
+static inline bool is_surrogate(int cp) 
 {
         return cp >= SURROGATE_MIN && cp <= SURROGATE_MAX;
 }
 
-static bool is_valid_codepoint(int cp) 
+static inline bool is_valid_codepoint(int cp) 
 {
         return cp <= CODEPOINT_MAX && !is_surrogate(cp);
 }
