@@ -464,7 +464,7 @@ static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
         memcpy(b, bytes, count);
         b[count] = '\0';
 
-        mis_set_bytes(p->mis, b/*ytes + skip*/, count/* - skip*/);
+        mis_set_bytes(p->mis, b, count);
 }
 
 static void parser_set_dom_info(Parser p, DomInfo di)
@@ -503,6 +503,7 @@ Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
                 .size = stack_size,
                 .stack = (((void *)p) + struct_bytes)
         };
+        p->state = STATE_START;
         p->flags = flags;
 
         return p;
