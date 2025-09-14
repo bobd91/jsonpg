@@ -6,7 +6,7 @@
  * #define JSONPG_GEN  my_gen
  * jsonpg_generator my_gen = jsonpg_generator_new(...);
  *
- * #include jsonpg_def_macros.h
+ * #include <libjsonpg/jsonpg_def_macros.h>
  *
  * start_array();
  * object(
@@ -16,7 +16,7 @@
  *      );
  * end_array();
  *
- * #include jsonpg_undef_macros.h
+ * #include <libjsonpg/jsonpg_undef_macros.h>
  *
  * Produces:
  *
