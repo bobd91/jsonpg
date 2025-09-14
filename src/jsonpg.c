@@ -3,6 +3,7 @@
 #include "types.h"
 #include "generate.h"
 #include "dom.h"
+#include "fast_double_parser.h"
 
 //#define JSONPG_DEBUG
 #include "debug.c"

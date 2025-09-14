@@ -1473,7 +1473,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         {
             // != 0
 
-            const auto dec = ToDecimal64(significand, exponent);
+            const FloatingDecimal64 dec = ToDecimal64(significand, exponent);
             return FormatDigits(buffer, dec.significand, dec.exponent, force_trailing_dot_zero);
         }
         else

@@ -190,11 +190,7 @@ Generator jsonpg_generator_new_opt(GeneratorOpts opts)
         if(1 < (opts.dom == true) + (opts.callbacks != NULL))
                 return NULL;
         
-        unsigned indent = opts.indent;
-        if(indent < 0)
-                indent = 0;
-        else if (indent > 8)
-                indent = 8;
+        unsigned indent = opts.indent <= 8 ? opts.indent : 8;
 
         Generator g = generator_new(opts.max_nesting);
         if(!g)

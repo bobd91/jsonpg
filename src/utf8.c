@@ -119,25 +119,25 @@ static void utf8_encode(unsigned cp, Bytes *bytes)
 static int utf8_validate_sequence(MemoryInputStream mis) 
 {
         unsigned codepoint;
-        int bar;
-        int cont;
+        unsigned bar;
+        unsigned cont;
         Byte byte = mis_peek(mis);
 
         if(IS_2_BYTE_LEADER(byte)) {
                 codepoint = LO_5_BITS(byte);
-                bar = _1_BYTE_MAX;
+                bar = _1_BYTE_MAX + 1;
                 cont = 1;
         } else if(IS_3_BYTE_LEADER(byte)) {
                 codepoint = LO_4_BITS(byte);
-                bar = _2_BYTE_MAX;
+                bar = _2_BYTE_MAX + 1;
                 cont = 2;
         } else if(IS_4_BYTE_LEADER(byte)) {
                 codepoint = LO_3_BITS(byte);
-                bar = _3_BYTE_MAX;
+                bar = _3_BYTE_MAX + 1;
                 cont = 3;
         } else if(byte <= _1_BYTE_MAX) {
                 codepoint = byte;
-                bar = -1;
+                bar = 0;
                 cont = 0;
         } else {
                 return -1;
@@ -150,7 +150,7 @@ static int utf8_validate_sequence(MemoryInputStream mis)
         // Move past leader
         mis_take(mis);
 
-        int length;
+        unsigned length;
         for(length = 1 ; length <= cont ; length++) {
                 byte = mis_peek(mis);
                 if(!IS_CONTINUATION(byte)) 
@@ -161,10 +161,10 @@ static int utf8_validate_sequence(MemoryInputStream mis)
 
         // If we got here then either all valid or all invalid
         // Could be an overlong encoding or an encoding of an invalid codepoint
-        if(codepoint <= bar || !is_valid_codepoint(codepoint)) 
+        if(codepoint < bar || !is_valid_codepoint(codepoint)) 
                 return -1;
 
-        return length;
+        return (int)length;
 }
 
 

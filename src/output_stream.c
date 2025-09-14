@@ -312,7 +312,6 @@ static inline bool jos_prefix_start(JsonOutputStream jos)
 static inline bool jos_prefix_end(JsonOutputStream jos)
 {
         jos->level--;
-        ASSERT(jos->level >= 0);
 
         if(jos->comma) {
                 jos->comma = false;

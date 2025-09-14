@@ -59,7 +59,7 @@ static void allocator_free(Allocator a)
         if(!a)
                 return;
         
-        for(int i = 0 ; i < a->used ; i++) {
+        for(size_t i = 0 ; i < a->used ; i++) {
                 JSONPG_LOG("Allocation[%ld] %p freed\n", i, a->allocs[i]);
                 pg_dealloc(a->allocs[i]);
         }
@@ -93,7 +93,7 @@ static void *allocator_alloc(Allocator a, size_t size)
 
 static void *allocator_realloc(Allocator a, void *p, size_t new_size)
 {
-        for(int i = 0 ; i < a->used ; i++) {
+        for(size_t i = 0 ; i < a->used ; i++) {
                 if(p == a->allocs[i]) {
                         void *np = pg_realloc(p, new_size);
                         if(!np)

@@ -178,12 +178,13 @@ ParseResult jsonpg_parse_opt(ParseOpts opts)
         Generator g;
         Parser p;
         
-        p = jsonpg_parser_new(
+        p = jsonpg_parser_new_opt((JsonpgParserOpts) {
                         .max_nesting = opts.max_nesting,
                         .flags = opts.flags,
                         .bytes = opts.bytes,
                         .count = opts.count,
-                        .dom = opts.dom);
+                        .dom = opts.dom
+                        });
         if(!p)
                 return make_error_return(JSONPG_ERROR_ALLOC, 0);
         else if(p->result.type == JSONPG_ERROR)

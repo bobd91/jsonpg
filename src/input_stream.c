@@ -40,7 +40,7 @@ static inline size_t mis_tell(MemoryInputStream mis)
 
 static inline void mis_adjust(MemoryInputStream mis, Bytes ptr)
 {
-        ASSERT(0 <= ptr - mis->start && ptr - mis->start <= mis->count);
+        ASSERT(0 <= ptr - mis->start && ptr - mis->start <= (long)mis->count);
         mis->read = ptr;
 }
 
