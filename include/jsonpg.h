@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stdint.h>
 #include <stdio.h>
 #include <stddef.h>
 
@@ -81,8 +80,8 @@ typedef struct {
         bool (*null)(void *ctx);
         bool (*integer)(void *ctx, long integer);
         bool (*real)(void *ctx, double real);
-        bool (*string)(void *ctx, uint8_t *bytes, size_t length);
-        bool (*key)(void *ctx, uint8_t *bytes , size_t length);
+        bool (*string)(void *ctx, unsigned char *bytes, size_t length);
+        bool (*key)(void *ctx, unsigned char *bytes , size_t length);
         bool (*start_array)(void *ctx);
         bool (*end_array)(void *ctx);
         bool (*start_object)(void *ctx);
@@ -101,19 +100,19 @@ void jsonpg_set_allocators(
 
 typedef struct {
         // required to track array/object nesting
-        uint16_t max_nesting;
+        unsigned short max_nesting;
 
         // mask of JSONPG_FLAG_... values above
-        uint16_t flags;
+        unsigned flags;
 
         // Input options, specify one type only
         //
         // All input is JSON bytes except for the 'dom' option
         // which is an in-memeory representation of parsed JSON
         // created by jsonpg_generator_new(.dom = true, ...)
-        uint8_t *bytes;         // input bytes, must set count
+        unsigned char *bytes;           // input bytes, must set count
         size_t count;
-        char *string;           // NULL terminated C string
+        char *string;                   // NULL terminated C string
         JsonpgDom dom;
 
 } JsonpgParserOpts;
@@ -138,8 +137,8 @@ JsonpgResult jsonpg_parse_result(JsonpgParser);
 // Example, pull parsing from string
 //          allow single quotes to make JSON string creation simpler
 //
-// p = jsonpg_parser_new(.flags = JSONPG_FLAG_SINGLE_QUOTES);
-// jsonpg_parse(.parser = p, .string = "{'k1': [12.5, 'foo']}");
+// p = jsonpg_parser_new(.flags = JSONPG_FLAG_SINGLE_QUOTES
+//                       .string = "{'k1': [12.5, 'foo']}");
 // 
 // The comments below indicate what JSON items are parsed
 // The actual type of item is returned from jsonpg_parse_next
@@ -167,9 +166,9 @@ typedef struct {
         // Options for parser created internally by json_parse
         // The parser will be freed before returning
         // See parser_opts above for desriptions
-        uint16_t max_nesting;
-        uint16_t flags;      
-        uint8_t *bytes;
+        unsigned short max_nesting;
+        unsigned flags;      
+        unsigned char *bytes;
         size_t count;
         char *string;
         JsonpgDom dom;
@@ -210,6 +209,7 @@ typedef struct {
         // If none are specified then the output will be buffered
         // and results will be available via jsonpg_result_string
         // or jsonpg_result_bytes
+        
         // Options 'dom' build an in-memory representation of the parse
         // results which is available via jsonpg_result_dom
         //
@@ -227,7 +227,7 @@ typedef struct {
         // jsonpg needs to know the maximum nesting level to support
         // It will default to 1024 which is more than enough for most use cases
         // The setting has no effect in producion builds
-        size_t max_nesting;
+        unsigned short max_nesting;
 
 } JsonpgGeneratorOpts;
 
@@ -241,7 +241,7 @@ JsonpgGenerator jsonpg_generator_new_opt(JsonpgGeneratorOpts);
 JsonpgErrorInfo jsonpg_result_error(JsonpgGenerator);
 JsonpgDom jsonpg_result_dom(JsonpgGenerator);
 char *jsonpg_result_string(JsonpgGenerator);
-size_t jsonpg_result_bytes(JsonpgGenerator, uint8_t **);
+size_t jsonpg_result_bytes(JsonpgGenerator, unsigned char **);
 
 void jsonpg_generator_free(JsonpgGenerator);
 
@@ -255,8 +255,8 @@ bool jsonpg_null(JsonpgGenerator);
 bool jsonpg_boolean(JsonpgGenerator, bool);
 bool jsonpg_integer(JsonpgGenerator, long);
 bool jsonpg_real(JsonpgGenerator, double);
-bool jsonpg_string(JsonpgGenerator, uint8_t *, size_t);
-bool jsonpg_key(JsonpgGenerator, uint8_t *, size_t);
+bool jsonpg_string(JsonpgGenerator, unsigned char *, size_t);
+bool jsonpg_key(JsonpgGenerator, unsigned char *, size_t);
 bool jsonpg_start_array(JsonpgGenerator);
 bool jsonpg_end_array(JsonpgGenerator);
 bool jsonpg_start_object(JsonpgGenerator);

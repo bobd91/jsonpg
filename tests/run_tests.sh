@@ -112,7 +112,7 @@ main() {
                         local outfile
                         outfile="${outdir}/${file}"
                         #echo "Parse -s $s $infile and compare with $outfile"
-                        if ./jsonpg -s $s $infile > temp.json 2>/dev/null; then
+                        if ./jsonpgtest -s $s $infile > temp.json 2>/dev/null; then
                                 if [ ! -f $outfile ]; then
                                         ((++fcount))
                                         failed_msg "Unexpected pass: ${file}"

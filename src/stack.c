@@ -28,8 +28,8 @@ static inline int stack_push(Stack s, int type)
         uint16_t sp = s->ptr;
         if(sp >= s->size) 
                 return -1;
-        int offset = sp >> 3;
-        int mask = 1 << (sp & 0x07);
+        Byte offset = (Byte)(sp >> 3);
+        Byte mask = 1 << (sp & 0x07);
         
         if(type == STACK_ARRAY)
                 s->stack[offset] |= mask;

@@ -1029,7 +1029,7 @@ static really_inline double compute_float_64(int64_t power, uint64_t i, bool neg
     lz--; // undo previous addition
   }
   mantissa &= ~(1ULL << 52);
-  uint64_t real_exponent = exponent - lz;
+  uint64_t real_exponent = (uint64_t)(exponent - lz);
   // we have to check that real_exponent is in range, otherwise we bail out
   if (unlikely((real_exponent < 1) || (real_exponent > 2046))) {
     *success = false;
@@ -1044,7 +1044,7 @@ static really_inline double compute_float_64(int64_t power, uint64_t i, bool neg
 }
 
 // Return the null pointer on error
-static const char *parse_float_strtod(const char *ptr, double *outDouble) {
+static char *parse_float_strtod(const char *ptr, double *outDouble) {
   // Hopefully very rarely needed
   // Just use standard C library functions
   char *endptr;

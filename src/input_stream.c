@@ -35,7 +35,7 @@ static void mis_set_bytes(MemoryInputStream mis, Bytes bytes, size_t count)
 
 static inline size_t mis_tell(MemoryInputStream mis)
 {
-        return mis->read - mis->start;
+        return (size_t)(mis->read - mis->start);
 }
 
 static inline void mis_adjust(MemoryInputStream mis, Bytes ptr)
@@ -44,7 +44,7 @@ static inline void mis_adjust(MemoryInputStream mis, Bytes ptr)
         mis->read = ptr;
 }
 
-static inline Bytes mis_at(MemoryInputStream mis, size_t pos)
+static inline CBytes mis_at(MemoryInputStream mis, size_t pos)
 {
         if(pos >= mis->count)
                 return NULL;
@@ -111,7 +111,7 @@ static inline void mis_string_start(MemoryInputStream mis)
 static inline void mis_string_update(MemoryInputStream mis)
 {
         if(mis->mark != mis->write) {
-                size_t amt = mis->read - mis->mark;
+                size_t amt = (size_t)(mis->read - mis->mark);
                 if(amt) {
                         memmove(mis->write, mis->mark, amt);
                         mis->write += amt;
@@ -143,10 +143,10 @@ static inline size_t mis_string_complete(MemoryInputStream mis, Bytes *bytes)
         *bytes = mis->string;
         if(mis->mark == mis->string) {
                 // No escapes
-                len = mis->read - mis->string;
+                len = (size_t)(mis->read - mis->string);
         } else {
                 mis_string_update(mis);
-                len = mis->write - mis->string;
+                len = (size_t)(mis->write - mis->string);
         }
         mis->read++;
         return len;

@@ -72,7 +72,7 @@ static inline DomNode dom_node_next(Dom root, size_t count)
         }
         size_t offset = hdr->count;
         hdr->count += required;
-        return (DomNode)(offset + (void *)hdr);
+        return (DomNode)(offset + (char *)hdr);
 }
 
 static inline DomNode dom_add_type(Dom root, JsonType type, size_t count)
@@ -236,7 +236,7 @@ static JsonType dom_parse_next(Parser p)
                 offset = sizeof(struct jsonpg_dom_s);
         }
 
-        DomNode node = (DomNode)(offset + (void *)hdr);
+        DomNode node = (DomNode)(offset + (char *)hdr);
         offset += NODE_SIZE;
         JsonType type = node->is.type;
         node++;
@@ -276,7 +276,7 @@ static ParseResult dom_parse(Parser p, Generator g)
         bool ok = true;
 
         while(hdr && ok) {
-                DomNode node = (DomNode)(offset + (void *)hdr);
+                DomNode node = (DomNode)(offset + (char *)hdr);
                 offset += NODE_SIZE;
                 JsonType type = node->is.type;
                 node++;

@@ -1,3 +1,4 @@
+#include <stddef.h>
 
 #define MOS_DEFAULT_CAPACITY 4096;
 
@@ -95,7 +96,7 @@ static inline bool mos_putn(MemoryOutputStream mos, Byte chr, size_t count)
         return true;
 }
 
-static inline bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
+static inline bool mos_puts(MemoryOutputStream mos, CBytes string, size_t count)
 {
         Bytes s = mos_reserve(mos, count);
         if(!s)
@@ -110,11 +111,13 @@ static inline bool mos_puts(MemoryOutputStream mos, Bytes string, size_t count)
 //         return mos->buffer;
 // }
 //
-static inline void mos_adjust(MemoryOutputStream mos, ssize_t amount)
-{
-        ASSERT(mos->count + amount >= 0);
 
-        mos->count += amount;
+static inline void mos_adjust(MemoryOutputStream mos, long amount)
+{
+        ASSERT((long)(mos->count) + amount >= 0);
+
+        // Keeping compilers happy :(
+        mos->count = (size_t)((long)(mos->count) + amount);
 }
 
 typedef struct json_output_stream_s *JsonOutputStream;
@@ -157,14 +160,14 @@ static inline bool jos_put(JsonOutputStream jos, Byte chr)
 //         return mos_putn(jos->mos, chr, count);
 // }
 //
-static inline bool jos_puts(JsonOutputStream jos, Bytes string, size_t count)
+static inline bool jos_puts(JsonOutputStream jos, CBytes string, size_t count)
 {
         return mos_puts(jos->mos, string, count);
 }
 
-static inline size_t find_next_escape(Bytes string, size_t count, size_t start)
+static inline size_t find_next_escape(CBytes string, size_t count, size_t start)
 {
-        int i;
+        size_t i;
         for(i = start ; i < count ; i++) {
                 Byte chr = string[i];
                 if(chr == '"' || chr == '\\' || chr < 0x20)
@@ -173,11 +176,14 @@ static inline size_t find_next_escape(Bytes string, size_t count, size_t start)
         return i;
 }
 
-static inline bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
+static inline bool jos_escape(JsonOutputStream jos, CBytes string, size_t count)
 {
+        // GCC doesn't like losing const quali
+// #pragma GCC diagnostic push
+// #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
         // gcc wont let me initialise unsigned char *[] from literal strings
         // so have to cast later 
-        static char *s_escapes[] = {
+        static char const * const s_escapes[] = {
                 "00", "01", "02", "03",
                 "04", "05", "06", "07",
                 NULL, NULL, NULL, "0B",
@@ -188,11 +194,13 @@ static inline bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
                 "1C", "1D", "1E", "1F"
         };
 
-        static Byte c_escapes[] = {
+        static unsigned char const c_escapes[] = {
                 [0x08] = 'b', [0x09] = 't', [0x0A] = 'n',
                 [0x0C] = 'f', [0x0D] = 'r', ['"'] = '"',
                 ['\\'] = '\\'
         };
+
+// #pragma GCC diagnostic pop
 
         MemoryOutputStream mos = jos->mos;
         size_t pmos1 = 0;
@@ -217,16 +225,15 @@ static inline bool jos_escape(JsonOutputStream jos, Bytes string, size_t count)
                         s[0] = '\\';
                         s[1] = e;
                 } else {
-                        Bytes es = (Bytes)s_escapes[chr];
-                        Bytes s = mos_reserve(mos, 6);
+                        s = mos_reserve(mos, 6);
                         if(!s)
                                 return false;
                         s[0] = '\\';
                         s[1] = 'u';
                         s[2] = '0';
                         s[3] = '0';
-                        s[4] = es[0];
-                        s[5] = es[1];
+                        s[4] = (Byte)s_escapes[chr][0];
+                        s[5] = (Byte)s_escapes[chr][1];
                 }
 
                 pmos1 = pmos2 + 1;
@@ -241,7 +248,7 @@ static inline bool jos_puti(JsonOutputStream jos, long integer)
         char *s = (char *)mos_reserve(jos->mos, buf_len);
         if(!s)
                 return false;
-        size_t count = i64toa(integer, s) - s;
+        long count = i64toa(integer, s) - s;
 
         ASSERT(count <= buf_len);
         mos_adjust(jos->mos, count - buf_len);
@@ -257,7 +264,7 @@ static inline bool jos_putr(JsonOutputStream jos, double real)
         if(!s)
                 return false;
 
-        size_t count = dtoa(s, real) - s;
+        long count = dtoa(s, real) - s;
 
         ASSERT(count <= buf_len);
         mos_adjust(jos->mos, count - buf_len);
@@ -337,7 +344,7 @@ static inline bool print_null(void *ctx)
         JsonOutputStream jos = ctx;
 
         return jos_prefix(jos)
-                && jos_puts(jos, (Bytes)"null", 4);
+                && jos_puts(jos, (CBytes)"null", 4);
 }
 
 static inline bool print_boolean(void *ctx, bool is_true)
@@ -346,8 +353,8 @@ static inline bool print_boolean(void *ctx, bool is_true)
 
         return jos_prefix(jos)
                         && (is_true
-                                ? jos_puts(jos, (Bytes)"true", 4)
-                                : jos_puts(jos, (Bytes)"false", 5));
+                                ? jos_puts(jos, (CBytes)"true", 4)
+                                : jos_puts(jos, (CBytes)"false", 5));
 }
 
 static inline bool print_string(void *ctx, Bytes bytes, size_t count)

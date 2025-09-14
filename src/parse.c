@@ -3,7 +3,7 @@
 static void parse_generate(Parser p, Generator g)
 {
         const MemoryInputStream mis = p->mis;
-        const int flags = p->flags;
+        const unsigned flags = p->flags;
         const bool opt_comments = flags & JSONPG_FLAG_COMMENTS;
         const bool opt_single_quotes = flags & JSONPG_FLAG_SINGLE_QUOTES;
         const bool opt_unquoted_keys = flags & JSONPG_FLAG_UNQUOTED_KEYS;
@@ -39,7 +39,6 @@ static void parse_generate(Parser p, Generator g)
                         b = consume_whitespace(p, opt_comments);
                         if(b != ':')
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
-
 
                         if(!jsonpg_key(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
@@ -191,14 +190,14 @@ ParseResult jsonpg_parse_opt(ParseOpts opts)
                 return p->result;
 
         if(1 != (opts.callbacks != NULL) + (opts.generator != NULL)) {
-                opt_error(p);
+                opt_error(p); // TODO: error handling consistent approach
                 return p->result;
         }
 
         if(opts.callbacks) {
                 g = generator_new(0);
                 if(!g) {
-                        alloc_error(p);
+                        alloc_error(p); // TODO: error handling consistent approach
                         return p->result;
                 }
                 generator_set_callbacks(g, opts.callbacks, opts.ctx);

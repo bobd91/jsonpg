@@ -11,9 +11,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#define REPLACEMENT_CHARACTER "\xEF\xBD\xBD"
-int replacement_length = 3;
-
 #define BYTE_ORDER_MARK "\xEF\xBB\xBF"
 
 #define SURROGATE_MIN           0xD800
@@ -55,12 +52,12 @@ int replacement_length = 3;
 #define IS_4_BYTE_LEADER(x) (_4_BYTE_LEADER == HI_5_BITS(x))
 #define IS_CONTINUATION(x)  (CONTINUATION_BYTE == HI_2_BITS(x))
 
-static inline bool is_surrogate(int cp) 
+static inline bool is_surrogate(unsigned cp) 
 {
         return cp >= SURROGATE_MIN && cp <= SURROGATE_MAX;
 }
 
-static inline bool is_valid_codepoint(int cp) 
+static inline bool is_valid_codepoint(unsigned cp) 
 {
         return cp <= CODEPOINT_MAX && !is_surrogate(cp);
 }
@@ -75,7 +72,7 @@ static inline bool is_valid_codepoint(int cp)
  * Will fail silently on non-debug build if an invalid codepoint is supplied
  * In a debug build it will fail an assertion
  */      
-static void utf8_encode(int cp, Bytes *bytes) 
+static void utf8_encode(unsigned cp, Bytes *bytes) 
 {
         int shift = 0;
         Byte lead_byte;
@@ -121,7 +118,7 @@ static void utf8_encode(int cp, Bytes *bytes)
  */
 static int utf8_validate_sequence(MemoryInputStream mis) 
 {
-        int codepoint;
+        unsigned codepoint;
         int bar;
         int cont;
         Byte byte = mis_peek(mis);
@@ -193,9 +190,9 @@ static int utf8_validate_sequence(MemoryInputStream mis)
  * Counts the number of characters that match the byte order mark
  * Returns the length of the BOM if all bytes match, or 0
  */
-static size_t utf8_bom_bytes(Bytes bytes, size_t count)
+static unsigned utf8_bom_bytes(Bytes bytes, size_t count)
 {
-        static size_t bom_count = sizeof(BYTE_ORDER_MARK) / sizeof(BYTE_ORDER_MARK[0]);
+        static unsigned bom_count = sizeof(BYTE_ORDER_MARK) / sizeof(BYTE_ORDER_MARK[0]);
         return (count >= bom_count 
                         && 0 == memcmp(BYTE_ORDER_MARK, bytes, bom_count))
                         ? bom_count

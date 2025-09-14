@@ -161,7 +161,7 @@ static Generator generator_new(uint16_t stack_size)
         g->stack = (struct stack_s) {
                 .ptr = 0,
                 .size = stack_size,
-                .stack = ((void *)g) + sizeof(generator_s)
+                .stack = ((Byte *)g) + sizeof(generator_s)
         };
 
         return g;
@@ -206,4 +206,9 @@ Generator jsonpg_generator_new_opt(GeneratorOpts opts)
                 return generator_set_callbacks(g, opts.callbacks, opts.ctx);
         else
                 return json_generator(g, indent);
+}
+
+ErrorInfo jsonpg_result_error(Generator g)
+{
+        return g->error;
 }

@@ -876,7 +876,10 @@ static inline uint64x2 Mul128(uint64_t x, uint64_t y) // 1 mulx
 {
     //uint128_t = unsigned __int128;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
     const unsigned __int128 p = (unsigned __int128)(x) * y;
+#pragma GCC diagnostic pop
 
     const uint64_t hi = (uint64_t)(p >> 64);
     const uint64_t lo = (uint64_t)(p);

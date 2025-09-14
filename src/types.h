@@ -27,7 +27,8 @@ typedef JsonpgGeneratorOpts             GeneratorOpts;
 // Shared project structures and typedefs
 
 typedef unsigned char                   Byte;
-typedef Byte                            *Bytes;
+typedef unsigned char                   *Bytes;
+typedef const unsigned char             *CBytes;
 
 typedef struct allocator_s              *Allocator;
 typedef struct memory_input_stream_s    *MemoryInputStream;
@@ -67,8 +68,8 @@ typedef enum {
 // Types exposed by library via opaque pointer
 
 struct jsonpg_parser_s {
+        unsigned                        flags;
         Allocator                       allocator;
-        uint16_t                        flags;
         MemoryInputStream               mis;
         ParseState                      state;
         DomInfo                         dom_info;

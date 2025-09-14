@@ -1,5 +1,4 @@
-//#include "warnings.h"
-#include "jsonpg.h"
+#include "../include/jsonpg.h"
 #include "common.h"
 #include "types.h"
 #include "generate.h"

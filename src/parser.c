@@ -128,14 +128,14 @@ static inline unsigned parse_hex4(Parser p, size_t esc_offset)
 
         unsigned codepoint = 0;
         for(int i = 0 ; i < 4 ; i++) {
-                char c = mis_peek(mis);
+                Byte c = mis_peek(mis);
                 codepoint <<= 4;
                 if(c >= '0' && c <= '9')
-                        codepoint += c - '0';
+                        codepoint += (unsigned)(c - '0');
                 else if(c >= 'A' && c <= 'F')
-                        codepoint += 10 + c -'A';
+                        codepoint += 10 + (unsigned)(c - 'A');
                 else if(c >= 'a' && c <= 'f')
-                        codepoint += 10 + c - 'a';
+                        codepoint += 10 + (unsigned)(c - 'a');
                 else 
                         throw_parse_error_at(p, JSONPG_ERROR_ESCAPE, esc_offset);
 
@@ -154,7 +154,7 @@ static unsigned parse_escape(Parser p)
         const MemoryInputStream mis = p->mis;
         const size_t esc_offset = mis_tell(mis);
         mis_take(mis);
-        const unsigned char e = mis_peek(mis);
+        const Byte e = mis_peek(mis);
         if(escape[e]) {
                 mis_take(mis);
                 return (unsigned)escape[e];
@@ -213,20 +213,20 @@ static inline Byte consume_whitespace(Parser p, bool allow_comments)
                 if(c != '/')
                         return c;
 
-                mis_take(mis);
+                mis_take(mis); // '/'
                 c = mis_peek(mis);
                 if(c == '*') {
-                        mis_take(mis);
+                        mis_take(mis); // '*'
                         while(true) {
                                 c = mis_find(mis, '*');
                                 if(c == '*' && mis_consume(mis, '/'))
                                         break;
-                                else if(c == '\0')
+                                else if(mis_eof(mis))
                                         return '\0';
                         }
                 } else if(c == '/') {
                         c = mis_find(mis, '\n');
-                        if(c == '\0')
+                        if(mis_eof(mis))
                                 return '\0';
                 } else {        
                         throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
@@ -241,8 +241,6 @@ static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *by
         mis_string_start(mis);
 
         while(true) {
-                //copy_safe_chars(p->is, os);
-                
                 Byte c = mis_peek(mis);
                 if(c == terminator) {
                         return mis_string_complete(mis, bytes);
@@ -269,8 +267,6 @@ static inline size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
         mis_string_start(mis);
 
         while(true) {
-                //copy_safe_chars(p->is, os);
-                
                 Byte c = mis_peek(mis);
                 if(c == '\\') {
                         mis_string_update(mis);
@@ -310,6 +306,9 @@ static inline size_t parse_nqstring(Parser p, Bytes *bytes)
         return parse_nqstring_in_stream(p, bytes);
 }
 
+// Lots of sign changing in parse_number so turn off warnings
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 static JsonType parse_number(Parser p, double *real_result, long *integer_result)
 {
         // Max digits for long,
@@ -328,9 +327,6 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         static const Byte plus = ((Byte)'+') - '0';
 
         const MemoryInputStream mis = p->mis;
-
-        // Bytes bytes = mis->read;
-        // const Bytes ptr = bytes;
 
         // If fast parsing fails might need to call
         // strtod, which needs to start from the beginning
@@ -385,7 +381,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 }
 
                 while(c < 10) {
-                        mis_take(mis); //mis_take(mis);
+                        mis_take(mis);
                         if(sig_digits < max_sig_digits) {
                                 sum = 10 * sum + c;
                                 exponent--;
@@ -395,7 +391,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 }
         }
         if(c == lower_e || c == upper_e) {
-                mis_take(mis); //mis_take(mis);
+                mis_take(mis);
                 force_double = true;
                 int exp_sign = 1;
                 int exp = 0;
@@ -428,10 +424,9 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         
         // Force double if either too many significant digits 
         // or sum is too big for signed long
-        force_double = force_double || sig_digits > max_sig_digits;
-        force_double = force_double || (negative 
-                                        ? sum > 1 + (uint64_t)LONG_MAX
-                                        : sum > LONG_MAX);
+        force_double = force_double 
+                || sig_digits > max_sig_digits
+                || (negative ? sum > 1 + (uint64_t)LONG_MAX : sum > LONG_MAX);
 
         if(force_double) {
                 bool success = false;
@@ -440,8 +435,8 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                         *real_result = compute_float_64(exponent, sum, negative, &success);
                 }
                 if(!success) {
-                        const char *start = (char *)mis_at(mis, start_pos);
-                        const char *end = parse_float_strtod(start, real_result);
+                        const char *start = (const char *)mis_at(mis, start_pos);
+                        char *end = parse_float_strtod(start, real_result);
                         if(!end)
                                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
                         mis_adjust(mis, (Bytes)end);
@@ -452,6 +447,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 return JSONPG_INTEGER;
         }
 }
+#pragma GCC diagnostic pop
 
 static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
 {
@@ -460,6 +456,8 @@ static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
         bytes += skip;
         count -= skip;
 
+        // The advantages of having a null terminated, writeable, byte array
+        // outweighs the cost of copying
         Bytes b = allocator_alloc(p->allocator, count + 1);
         memcpy(b, bytes, count);
         b[count] = '\0';
@@ -477,15 +475,12 @@ static inline uint16_t get_stack_size(uint16_t stack_size)
         return stack_size > MIN_STACK_SIZE ? stack_size : MIN_STACK_SIZE;
 }
 
-void jsonpg_parser_free(Parser p)
+static Parser parser_new(Allocator a, uint16_t stack_size, unsigned flags)
 {
-        allocator_free(p->allocator);
-}
-
-Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
-{
+        // The bit stack (keeps track of object/array nesting)
+        // Is allocated space directly after the parser struct
         size_t struct_bytes = sizeof(struct jsonpg_parser_s);
-        Parser p = allocator_alloc(a, struct_bytes + ((stack_size + 7) / 8));
+        Parser p = allocator_alloc(a, struct_bytes + (unsigned)((stack_size + 7) / 8));
         if(!p)
                 return NULL;
 
@@ -498,10 +493,10 @@ Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
 
         p->dom_info = (DomInfo){};
 
-        p->stack = (struct stack_s){
+        p->stack = (struct stack_s) {
                 .ptr = 0,
                 .size = stack_size,
-                .stack = (((void *)p) + struct_bytes)
+                .stack = (((Byte *)p) + struct_bytes)
         };
         p->state = STATE_START;
         p->flags = flags;
@@ -509,10 +504,16 @@ Parser parser_new(Allocator a, uint16_t stack_size, uint16_t flags)
         return p;
 }
 
+void jsonpg_parser_free(Parser p)
+{
+        allocator_free(p->allocator);
+}
+
+
 Parser jsonpg_parser_new_opt(ParserOpts opts)
 {
         uint16_t stack_size = get_stack_size(opts.max_nesting);
-        uint16_t flags = opts.flags;
+        unsigned flags = opts.flags;
 
         Allocator a = allocator_new();
         if(!a)
@@ -544,9 +545,4 @@ Parser jsonpg_parser_new_opt(ParserOpts opts)
 ParseResult jsonpg_parse_result(Parser p)
 {
         return p->result;
-}
-
-ErrorInfo jsonpg_parse_error(Parser p)
-{
-        return p->result.error;
 }

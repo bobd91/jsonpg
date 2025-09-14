@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "../src/jsonpg.h"
+#include "../include/jsonpg.h"
 
-#include "../src/jsonpg_def_macros.h"
+#include "../include/jsonpg_def_macros.h"
 
 #define test_start() JsonpgGenerator gen = ctx
 #define test_end()   return true;
@@ -24,10 +24,7 @@ bool test_boolean(void *ctx, bool is_true)
 {
         test_start();
 
-        if(is_true)
-                true();
-        else
-                false();
+        boolean(is_true);
         
         test_end();
 }
@@ -54,7 +51,7 @@ bool test_string(void *ctx, uint8_t *bytes, size_t count)
 {
         test_start();
 
-        str_bytes(bytes, count);
+        string_bytes(bytes, count);
 
         test_end();
 }
@@ -104,7 +101,7 @@ bool test_end_array(void *ctx)
         test_end();
 }
 
-#include "../src/jsonpg_undef_macros.h"
+#include "../include/jsonpg_undef_macros.h"
 
 void *ctx_generator(void) {
         return jsonpg_generator_new(.max_nesting = 0);
