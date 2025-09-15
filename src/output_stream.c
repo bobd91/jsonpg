@@ -124,6 +124,7 @@ typedef struct json_output_stream_s *JsonOutputStream;
 
 struct json_output_stream_s {
         MemoryOutputStream mos;
+        Generator generator;
         unsigned indent;
         unsigned level;
         bool nl;
@@ -131,7 +132,7 @@ struct json_output_stream_s {
         bool key;
 };
 
-static JsonOutputStream jos_new(Allocator a, unsigned indent)
+static JsonOutputStream jos_new(Allocator a, unsigned indent, Generator g)
 {       
         JsonOutputStream jos = allocator_alloc(a, sizeof(struct json_output_stream_s));
         if(!jos)
@@ -141,6 +142,7 @@ static JsonOutputStream jos_new(Allocator a, unsigned indent)
         if(!jos->mos)
                 return NULL;
       
+        jos->generator = g;
         jos->indent = indent;
         jos->nl = false;
         jos->comma = false;
@@ -165,24 +167,19 @@ static inline bool jos_puts(JsonOutputStream jos, CBytes string, size_t count)
         return mos_puts(jos->mos, string, count);
 }
 
-static inline size_t find_next_escape(CBytes string, size_t count, size_t start)
+static inline size_t find_next_special(CBytes string, size_t count, size_t start)
 {
         size_t i;
         for(i = start ; i < count ; i++) {
                 Byte chr = string[i];
-                if(chr == '"' || chr == '\\' || chr < 0x20)
+                if(chr == '"' || chr == '\\' || chr < 0x20 || chr > 0x7F)
                         return i;
         }
         return i;
 }
 
-static inline bool jos_escape(JsonOutputStream jos, CBytes string, size_t count)
+static inline bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t count)
 {
-        // GCC doesn't like losing const quali
-// #pragma GCC diagnostic push
-// #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
-        // gcc wont let me initialise unsigned char *[] from literal strings
-        // so have to cast later 
         static char const * const s_escapes[] = {
                 "00", "01", "02", "03",
                 "04", "05", "06", "07",
@@ -200,8 +197,6 @@ static inline bool jos_escape(JsonOutputStream jos, CBytes string, size_t count)
                 ['\\'] = '\\'
         };
 
-// #pragma GCC diagnostic pop
-
         MemoryOutputStream mos = jos->mos;
         size_t pmos1 = 0;
         size_t pmos2 = 0;
@@ -210,34 +205,45 @@ static inline bool jos_escape(JsonOutputStream jos, CBytes string, size_t count)
 
         // TODO: find/validate outgoing UTF8 sequences 
         //       as assert or flag?
-        while(count > (pmos2 = find_next_escape(string, count, pmos1))) {
+        while(count > (pmos2 = find_next_special(string, count, pmos1))) {
                 chr = string[pmos2];
 
                 if(!mos_puts(mos, string + pmos1, pmos2 - pmos1))
                         return false;
                 
-                // chr will be < 0x20, '"' or '\\'
-                Byte e = c_escapes[chr];
-                if(e) {
-                        s = mos_reserve(mos, 2);
-                        if(!s)
+                if(chr > 0x7F) {
+                        int len = utf8_validate_sequence(string + pmos2, count - pmos2);
+                        if(len == -1) {
+                                jos->generator->error = make_error(JSONPG_ERROR_UTF8, 0);
                                 return false;
-                        s[0] = '\\';
-                        s[1] = e;
+                        }
+                        if(!mos_puts(mos, string + pmos2, len))
+                                return false;
+                        pmos1 = pmos2 + len;
                 } else {
-                        s = mos_reserve(mos, 6);
-                        if(!s)
-                                return false;
-                        s[0] = '\\';
-                        s[1] = 'u';
-                        s[2] = '0';
-                        s[3] = '0';
-                        s[4] = (Byte)s_escapes[chr][0];
-                        s[5] = (Byte)s_escapes[chr][1];
+                        // chr will be < 0x20, '"' or '\\'
+                        Byte e = c_escapes[chr];
+                        if(e) {
+                                s = mos_reserve(mos, 2);
+                                if(!s)
+                                        return false;
+                                s[0] = '\\';
+                                s[1] = e;
+                        } else {
+                                s = mos_reserve(mos, 6);
+                                if(!s)
+                                        return false;
+                                s[0] = '\\';
+                                s[1] = 'u';
+                                s[2] = '0';
+                                s[3] = '0';
+                                s[4] = (Byte)s_escapes[chr][0];
+                                s[5] = (Byte)s_escapes[chr][1];
+                        }
+                        pmos1 = pmos2 + 1;
                 }
-
-                pmos1 = pmos2 + 1;
         }
+
         return mos_puts(mos, string + pmos1, pmos2 - pmos1);
 }
 
@@ -362,7 +368,7 @@ static inline bool print_string(void *ctx, Bytes bytes, size_t count)
 
         return jos_prefix(jos)
                 && jos_put(jos, '"')
-                && jos_escape(jos, bytes, count)
+                && jos_scan_escape(jos, bytes, count)
                 && jos_put(jos, '"');
 }
 
@@ -372,7 +378,7 @@ static inline bool print_key(void *ctx, Bytes bytes, size_t count)
 
         return jos_prefix(jos)
                 && jos_put(jos, '"')
-                && jos_escape(jos, bytes, count)
+                && jos_scan_escape(jos, bytes, count)
                 && jos_put(jos, '"')
                 && jos_key_suffix(jos);
 }
@@ -441,7 +447,7 @@ static Callbacks print_callbacks = {
 
 static Generator json_generator(Generator g, unsigned indent)
 {
-        JsonOutputStream jos = jos_new(g->allocator, indent);
+        JsonOutputStream jos = jos_new(g->allocator, indent, g);
         if(!jos)
                 return NULL;
 

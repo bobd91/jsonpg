@@ -233,7 +233,8 @@ typedef struct {
 
 JsonpgGenerator jsonpg_generator_new_opt(JsonpgGeneratorOpts);
 #define jsonpg_generator_new(...)  jsonpg_generator_new_opt(    \
-                (JsonpgGeneratorOpts){ __VA_ARGS__ })           
+                (JsonpgGeneratorOpts){ .max_nesting = 1024, \
+                                        __VA_ARGS__ })           
 
 // The lifetime of results is that of their generator.
 // A string or dom returned from these functions should not be used

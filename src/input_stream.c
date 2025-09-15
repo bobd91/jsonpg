@@ -101,6 +101,16 @@ static inline bool mis_consume(MemoryInputStream mis, Byte b)
         return true;
 }
 
+static inline bool mis_validate_utf8(MemoryInputStream mis)
+{
+        // Terminating \0 will halt utf8 validation if <4 chars
+        int len = utf8_validate_sequence(mis->read, 4);
+        if(len == -1)
+                return false;
+        mis->read += len;
+        return true;
+}
+
 static inline void mis_string_start(MemoryInputStream mis)
 {
         mis->string = mis->read;

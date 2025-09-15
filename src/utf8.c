@@ -116,12 +116,12 @@ static void utf8_encode(unsigned cp, Bytes *bytes)
  * Validates a sequence of utf-8 bytes (1-4 bytes) and 
  * returns the byte length if valid, else -1
  */
-static int utf8_validate_sequence(MemoryInputStream mis) 
+static int utf8_validate_sequence(CBytes bytes, size_t count) 
 {
         unsigned codepoint;
         unsigned bar;
         unsigned cont;
-        Byte byte = mis_peek(mis);
+        Byte byte = *bytes++;
 
         if(IS_2_BYTE_LEADER(byte)) {
                 codepoint = LO_5_BITS(byte);
@@ -144,18 +144,14 @@ static int utf8_validate_sequence(MemoryInputStream mis)
         }
 
         // Do we have enough input for leader and continuation bytes
-        if(mis->count < 1 + cont)
+        if(count < 1 + cont)
                 return -1;
-
-        // Move past leader
-        mis_take(mis);
 
         unsigned length;
         for(length = 1 ; length <= cont ; length++) {
-                byte = mis_peek(mis);
+                byte = *bytes++;
                 if(!IS_CONTINUATION(byte)) 
                         return -1;
-                mis_take(mis);
                 codepoint = (codepoint << 6) | LO_6_BITS(byte);
         }
 

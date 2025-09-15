@@ -1,6 +1,7 @@
 #include <setjmp.h>
 #include <limits.h>
 #include <float.h>
+#include <string.h>
 
 #include "fast_double_parser.h"
 
@@ -250,7 +251,7 @@ static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *by
                         utf8_encode(codepoint, mis_writer(mis));
                         mis_string_restart(mis);
                 } else if(c >= 0x80) {
-                        if(-1 == utf8_validate_sequence(mis))
+                        if(!mis_validate_utf8(mis))
                                 throw_parse_error(p, JSONPG_ERROR_UTF8);
                 } else if(c < 0x20) {
                         throw_parse_error(p, JSONPG_ERROR_INVALID);
@@ -262,6 +263,7 @@ static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *by
 
 static inline size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
 {
+        static const char *terminators = " ,:]}\n\r\t";
         const MemoryInputStream mis = p->mis;
 
         mis_string_start(mis);
@@ -272,10 +274,10 @@ static inline size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
                         mis_string_update(mis);
                         mis_byte_copy(mis);
                         mis_string_restart(mis);
-                } else if(c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+                } else if(strchr(terminators, c)) {
                         return mis_string_complete(mis, bytes);
                 } else if(c >= 0x80) {
-                        if(-1 == utf8_validate_sequence(p->mis))
+                        if(!mis_validate_utf8(mis))
                                 throw_parse_error(p, JSONPG_ERROR_UTF8);
                 } else if(c < 0x20) {
                         throw_parse_error(p, JSONPG_ERROR_INVALID);
