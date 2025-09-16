@@ -1,5 +1,25 @@
 #include <stdio.h>
 
+static const char * error_msgs[] = {
+        [JSONPG_ERROR_OPT]              = "Invalid option",
+        [JSONPG_ERROR_ALLOC]            = "Out of memory",
+        [JSONPG_ERROR_NUMBER]           = "Invalid number",
+        [JSONPG_ERROR_UTF8]	        = "Invalid UTF-8",
+        [JSONPG_ERROR_SURROGATE]	= "Invalid surrogate",
+        [JSONPG_ERROR_STACK_OVERFLOW]	= "Stack overflow",
+        [JSONPG_ERROR_STACK_UNDERFLOW]	= "Stack underflow",
+        [JSONPG_ERROR_EXPECTED_VALUE]	= "Value expected",
+        [JSONPG_ERROR_EXPECTED_KEY]	= "Key expected",
+        [JSONPG_ERROR_NO_OBJECT]	= "Not in object",
+        [JSONPG_ERROR_NO_ARRAY]	        = "Not in array",
+        [JSONPG_ERROR_ESCAPE]	        = "Invalid escape",
+        [JSONPG_ERROR_UNEXPECTED]	= "Unexpected input",
+        [JSONPG_ERROR_INVALID]	        = "Invalid input",
+        [JSONPG_ERROR_TERMINATED]	= "Generator terminated",
+        [JSONPG_ERROR_EOF]	        = "Unexpected EOF"
+};
+        
+
 #ifdef JSONPG_DEBUG
 static void dump_p(Parser p)
 {
@@ -43,16 +63,28 @@ static void dump_g(Generator g)
 }
 #endif
 
-static ErrorInfo make_error(ErrorCode code, size_t at)
+static const char *error_text(ErrorCode code)
 {
-        return (ErrorInfo){ .code = code, .at = at };
+        if(code < sizeof(error_msgs))
+                return error_msgs[code];
+        else
+                return "Unknown error";
+}
+
+static ErrorInfo make_error(ErrorCode code)
+{
+        return (ErrorInfo){ 
+                .code = code, 
+                .text = error_text(code)
+        };
 }
 
 static ParseResult make_error_return(ErrorCode code, size_t at)
 {
         return (ParseResult) {
                         .type = JSONPG_ERROR,
-                        .error = make_error(code, at)
+                        .position = at,
+                        .error = make_error(code)
         };
 }
 
@@ -70,31 +102,6 @@ static ParseResult make_pg_error_return(Parser p, Generator g)
                 r = make_error_return(JSONPG_ERROR_UNEXPECTED, 0);
         }
         return r;
-}
-
-static JsonType set_result_error(Parser p, ErrorCode code) 
-{
-        p->result.type = JSONPG_ERROR;
-        p->result.error.code = code;
-        p->result.error.at = p->mis->start
-                ? mis_tell(p->mis)
-                : 0;
-
-#ifdef JSONPG_DEBUG
-        dump_p(p);
-#endif
-
-        return JSONPG_ERROR;
-}
-
-static JsonType alloc_error(Parser p)
-{
-        return set_result_error(p, JSONPG_ERROR_ALLOC);
-}
-
-static JsonType opt_error(Parser p)
-{
-        return set_result_error(p, JSONPG_ERROR_OPT);
 }
 
 

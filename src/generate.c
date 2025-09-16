@@ -5,7 +5,7 @@ static bool can_value(Generator g)
 {
         if(g->stack.size && stack_peek(&g->stack) == STACK_OBJECT) {
                 if(g->key_next) {
-                        g->error = make_error(JSONPG_ERROR_EXPECTED_KEY, g->count);
+                        g->error = make_error(JSONPG_ERROR_EXPECTED_KEY);
                         return false;
                 } else {
                         g->key_next = true;
@@ -18,7 +18,7 @@ static bool can_value(Generator g)
 static bool can_key(Generator g)
 {
         if(g->stack.size && !g->key_next) {
-                g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE, g->count);
+                g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE);
                 return false;
         }
         g->key_next = false;
@@ -31,8 +31,7 @@ static bool can_push(Generator g, int type)
                 return false;
         if(g->stack.size) {
                 if(-1 == stack_push(&g->stack, type)) {
-                        g->error = make_error(JSONPG_ERROR_STACK_OVERFLOW,
-                                        g->count);
+                        g->error = make_error(JSONPG_ERROR_STACK_OVERFLOW);
                         return false;
                 }
                 g->key_next = type == STACK_OBJECT;
@@ -47,18 +46,15 @@ static bool can_pop(Generator g, int type)
         if(g->stack.size) {
                 cur_type = stack_peek(&g->stack);
                 if(cur_type == -1) {
-                        g->error = make_error(JSONPG_ERROR_STACK_UNDERFLOW,
-                                        g->count);
+                        g->error = make_error(JSONPG_ERROR_STACK_UNDERFLOW);
                         return false;
                 } else if(type != cur_type) {
                         g->error = make_error((type == STACK_OBJECT)
                                 ? JSONPG_ERROR_NO_OBJECT
-                                : JSONPG_ERROR_NO_ARRAY,
-                                        g->count);
+                                : JSONPG_ERROR_NO_ARRAY);
                         return false;
                 } else if(type == STACK_OBJECT && !g->key_next) {
-                        g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE,
-                                        g->count);
+                        g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE);
                         return false;
                 }
                 stack_pop(&g->stack);
@@ -96,14 +92,14 @@ bool jsonpg_real(Generator g, double real)
         return  (!g->callbacks->real) || g->callbacks->real(g->ctx, real);
 }
 
-bool jsonpg_string(Generator g, uint8_t *bytes, size_t count)
+bool jsonpg_string(Generator g, const unsigned char *bytes, size_t count)
 {
         ASSERT(can_value(g));
 
         return (!g->callbacks->string) || g->callbacks->string(g->ctx, bytes, count);
 }
 
-bool jsonpg_key(Generator g, uint8_t *bytes, size_t count)
+bool jsonpg_key(Generator g, const unsigned char *bytes, size_t count)
 {
         ASSERT(can_key(g));
 

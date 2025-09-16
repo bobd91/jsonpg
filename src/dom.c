@@ -111,7 +111,7 @@ static inline DomNode dom_add_real(Dom root, double real)
         return node;
 }
 
-static inline DomNode dom_add_bytes(Dom root, JsonType type, Bytes bytes, size_t count)
+static inline DomNode dom_add_bytes(Dom root, JsonType type, const unsigned char *bytes, size_t count)
 {
         DomNode node = dom_add_type(root, type, count);
         if(!node)
@@ -147,13 +147,13 @@ static inline bool dom_real(void *ctx, double real)
         return dom_add_real(root, real);
 }
 
-static inline bool dom_string(void *ctx, Bytes bytes, size_t count)
+static inline bool dom_string(void *ctx, const unsigned char *bytes, size_t count)
 {
         Dom root = ctx;
         return dom_add_bytes(root, JSONPG_STRING, bytes, count);
 }
 
-static inline bool dom_key(void *ctx, Bytes bytes, size_t count)
+static inline bool dom_key(void *ctx, const unsigned char *bytes, size_t count)
 {
         Dom root = ctx;
         return dom_add_bytes(root, JSONPG_KEY, bytes, count);

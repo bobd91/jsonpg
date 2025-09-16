@@ -47,7 +47,7 @@ bool test_real(void *ctx, double d)
         test_end();
 }
 
-bool test_string(void *ctx, uint8_t *bytes, size_t count)
+bool test_string(void *ctx, const unsigned char *bytes, size_t count)
 {
         test_start();
 
@@ -56,7 +56,7 @@ bool test_string(void *ctx, uint8_t *bytes, size_t count)
         test_end();
 }
 
-bool test_key(void *ctx, uint8_t *bytes, size_t count)
+bool test_key(void *ctx, const unsigned char *bytes, size_t count)
 {
         test_start();
 

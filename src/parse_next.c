@@ -1,4 +1,28 @@
-
+/*
+ * These functions provide the pull parse functionality.
+ *
+ * As a pull parser returns one JSON item at a time it needs to keep track of 
+ * where it is up to so that it can resume when next called.
+ *
+ * The stack mechanism used in the normal parse is used to keep track of the 
+ * nesting of arrays/objects but we need additional information to be able to resume. 
+ * This is stored in the parser .state member and can have the following values:
+ *
+ * STATE_START          - at the start of the parse
+ * STATE_OBJECT         - in object, expecting key
+ * STATE_KEY            - in object after key:
+ * STATE_KEY_VALUE      - in object after key:value (but before ,)
+ * STATE_ARRAY          - in array, expecting value
+ * STATE_ARRAY          - in array after value (but before ,)
+ * STATE_DONE           - parse complete
+ * STATE_EOF            - parse at end of input
+ *
+ * There are two more states which are only used during a single
+ * parse step and so never get stored in parser->state
+ *
+ * STATE_OBJECT_COMMA   - in object after ,
+ * STATE_ARRAY_COMMA    - in array after , 
+ */ 
 
 static inline ParseState state_change_value(ParseState state)
 {
@@ -18,82 +42,77 @@ static inline ParseState state_change_end(Parser p)
 static inline JsonType accept_boolean(Parser p, bool is_true)
 {
         p->state = state_change_value(p->state);
-        p->result.type = is_true ? JSONPG_TRUE : JSONPG_FALSE;
+        p->result = parse_result(p,
+                         is_true ? JSONPG_TRUE : JSONPG_FALSE);
         return p->result.type;
 }
 
 static inline JsonType accept_null(Parser p)
 {
         p->state = state_change_value(p->state);
-        p->result.type = JSONPG_NULL;
+        p->result = parse_result(p, JSONPG_NULL);
         return p->result.type;
 }
 
 static inline JsonType accept_integer(Parser p, long integer)
 {
         p->state = state_change_value(p->state);
-        p->result.type = JSONPG_INTEGER;
-        p->result.number.integer = integer;
+        p->result = parse_result(p, JSONPG_INTEGER, integer);
         return p->result.type;
 }
 
 static inline JsonType accept_real(Parser p, double real)
 {
         p->state = state_change_value(p->state);
-        p->result.type = JSONPG_REAL;
-        p->result.number.real = real;
+        p->result = parse_result(p, JSONPG_REAL, real);
         return p->result.type;
 }
 
 static inline JsonType accept_string(Parser p, Bytes bytes, size_t count)
 {
         p->state = state_change_value(p->state);
-        p->result.type = JSONPG_STRING;
-        p->result.string.bytes = bytes;
-        p->result.string.count = count;
+        p->result = parse_result(p, JSONPG_STRING, bytes, count);
         return p->result.type;
 }
 
 static inline JsonType accept_key(Parser p, Bytes bytes, size_t count)
 {
         p->state = STATE_KEY;
-        p->result.type = JSONPG_KEY;
-        p->result.string.bytes = bytes;
-        p->result.string.count = count;
+        p->result = parse_result(p, JSONPG_KEY, bytes, count);
         return p->result.type;
 }
 
 static inline JsonType accept_start_object(Parser p)
 {
         p->state = STATE_OBJECT;
-        p->result.type = JSONPG_START_OBJECT;
+        p->result = parse_result(p, JSONPG_START_OBJECT);
         return p->result.type;
 }
 
 static inline JsonType accept_end_object(Parser p)
 {
         p->state = state_change_end(p);
-        p->result.type = JSONPG_END_OBJECT;
+        p->result = parse_result(p, JSONPG_END_OBJECT);
         return p->result.type;
 }
 
 static inline JsonType accept_start_array(Parser p)
 {
         p->state = STATE_ARRAY;
-        p->result.type = JSONPG_START_ARRAY;
+        p->result = parse_result(p, JSONPG_START_ARRAY);
         return p->result.type;
 }
 
 static inline JsonType accept_end_array(Parser p)
 {
         p->state = state_change_end(p);
-        p->result.type = JSONPG_END_ARRAY;
+        p->result = parse_result(p, JSONPG_END_ARRAY);
         return p->result.type;
 }
 
 static inline JsonType accept_eof(Parser p)
 {
-        p->result.type = JSONPG_EOF;
+        p->result = parse_result(p, JSONPG_EOF);
         return p->result.type;
 }
 
@@ -188,9 +207,14 @@ static JsonType parse_next(Parser p)
                         break;
 
                 case STATE_DONE:
-                        if(!(p->flags & JSONPG_FLAG_IGNORE_TRAILING_CHARS)) {
-                                b = consume_whitespace(p, opt_comments);
-                                if(!mis_eof(mis))
+                        consume_whitespace(p, opt_comments);
+                        if(!mis_eof(mis)) {
+                                if(p->flags & JSONPG_FLAG_MULTIPLE_VALUES) {
+                                        state = STATE_START;
+                                        break;
+                                }
+
+                                if(!(p->flags & JSONPG_FLAG_IGNORE_TRAILING_CHARS))
                                         throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                         }
                         p->state = STATE_EOF;

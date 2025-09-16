@@ -2,8 +2,11 @@
 #include <limits.h>
 #include <float.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "fast_double_parser.h"
+
+// Parser functions used by parse.c and parse_next.c
 
 #define MIN_STACK_SIZE 1024
 
@@ -16,12 +19,45 @@ static inline bool parser_in_array(Parser p)
 {
         return stack_peek(&p->stack) == STACK_ARRAY;
 }
-//
-// static bool parser_in_any(Parser p)
-// {
-//         return p->stack.ptr > 0;
-// }
-//
+
+static size_t parse_position(Parser p)
+{
+        return p->mis->start ? mis_tell(p->mis) : 0;
+}
+
+static ParseResult parse_result(Parser p, JsonType type, ...)
+{
+        va_list ap;
+        ParseResult result;
+        va_start(ap, type);
+        
+        result.type = type;
+        result.position = parse_position(p);
+
+        switch(type) {
+        case JSONPG_STRING:
+        case JSONPG_KEY:
+                result.string.bytes = va_arg(ap, unsigned char *);
+                result.string.count = va_arg(ap, size_t);
+                break;
+        case JSONPG_REAL:
+                result.number.real = va_arg(ap, double);
+                break;
+        case JSONPG_INTEGER:
+                result.number.integer = va_arg(ap, long);
+                break;
+        case JSONPG_ERROR:
+                result.error.code = va_arg(ap, ErrorCode);
+                result.error.text = error_text(result.error.code);
+                break;
+        default:
+                // nothing to do
+        }
+        va_end(ap);
+
+        return result;
+}
+
 [[noreturn]]
 static void throw_parse_error_at(Parser p, ErrorCode error_code, size_t at)
 {
@@ -32,9 +68,7 @@ static void throw_parse_error_at(Parser p, ErrorCode error_code, size_t at)
 [[noreturn]]
 static void throw_parse_error(Parser p, ErrorCode error_code)
 {
-        size_t at = p->mis->start ? mis_tell(p->mis) : 0;
-
-        throw_parse_error_at(p, error_code, at);
+        throw_parse_error_at(p, error_code, parse_position(p));
 }
 
 static inline int parse_start_object(Parser p)
@@ -123,7 +157,7 @@ static inline void parse_null(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static inline unsigned parse_hex4(Parser p, size_t esc_offset)
+static inline unsigned parse_hex4(Parser p)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -138,7 +172,7 @@ static inline unsigned parse_hex4(Parser p, size_t esc_offset)
                 else if(c >= 'a' && c <= 'f')
                         codepoint += 10 + (unsigned)(c - 'a');
                 else 
-                        throw_parse_error_at(p, JSONPG_ERROR_ESCAPE, esc_offset);
+                        throw_parse_error(p, JSONPG_ERROR_ESCAPE);
 
                 mis_take(mis);
         }
@@ -153,38 +187,41 @@ static unsigned parse_escape(Parser p)
         };
 
         const MemoryInputStream mis = p->mis;
-        const size_t esc_offset = mis_tell(mis);
-        mis_take(mis);
+
+        mis_take(mis); // '\\'
+
         const Byte e = mis_peek(mis);
+
         if(escape[e]) {
                 mis_take(mis);
                 return (unsigned)escape[e];
         }
+
         if(e == 'u') {
                 mis_take(mis);
-                unsigned codepoint = parse_hex4(p, esc_offset);
+                unsigned codepoint = parse_hex4(p);
                 if(codepoint >= 0xD800 && codepoint <= 0xDFFF) {
                         // Got surrogate but high (first one) must be 0xD800-0xDBFF
                         if(codepoint <= 0xDBFF) {
                                 // high surrogate must be followed by low
-                                if(!mis_consume(mis, '\\')
-                                                || !mis_consume(mis, 'u'))
-                                        throw_parse_error_at(p, JSONPG_ERROR_SURROGATE, esc_offset);
+                                if(!(mis_consume(mis, '\\')
+                                                && mis_consume(mis, 'u')))
+                                        throw_parse_error(p, JSONPG_ERROR_SURROGATE);
 
-                                const unsigned codepoint2 = parse_hex4(p, esc_offset + 6);
+                                const unsigned codepoint2 = parse_hex4(p);
 
                                 if(codepoint2 < 0xDC00 || codepoint2 > 0xDFFF)
-                                        throw_parse_error_at(p, JSONPG_ERROR_SURROGATE, esc_offset + 6);
+                                        throw_parse_error(p, JSONPG_ERROR_SURROGATE);
 
                                 codepoint = (((codepoint - 0xD800) << 10)
                                                 | (codepoint2 - 0xDC00)) + 0x10000;
                         } else {
-                                throw_parse_error_at(p, JSONPG_ERROR_SURROGATE, esc_offset);
+                                throw_parse_error(p, JSONPG_ERROR_SURROGATE);
                         }
                 }
                 return codepoint;
         } else {
-                throw_parse_error_at(p, JSONPG_ERROR_ESCAPE, esc_offset);
+                throw_parse_error(p, JSONPG_ERROR_ESCAPE);
         }
 }
 
@@ -308,25 +345,37 @@ static inline size_t parse_nqstring(Parser p, Bytes *bytes)
         return parse_nqstring_in_stream(p, bytes);
 }
 
+// This function, along with formatting numbers, takes much more cpu
+// than any other parse function so we try and save as many tests/branches as we can
+//
+// If the number is supplied without decimal point and exponent, and it falls 
+// in the range of a signed long, we treat it as a signed long.
+// Otherwise it is stored in a double.
+// We try to parse doubles with our C conversion of 
+// https://github.com/lemire/fast_double_parser which can be significantly
+// faster than the standard library strtod but does not work for all
+// valid double precision numbers.  We fallback to strtod where necessary.
+//
 // Lots of sign changing in parse_number so turn off warnings
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
+
 static JsonType parse_number(Parser p, double *real_result, long *integer_result)
 {
-        // Max digits for long,
-        // double is 15-17 but we will lose those when converting
+        // We only take the most significant digits
+        // Max digits for long is 19
+        // double is 15-17 so we may lose some digits when converting
         static const int max_sig_digits = 19;
 
         // By taking ascii '0' from unsigned char
-        // We can test for digits with a single comparison (<10)
+        // We convert '0' => 0 etc, which we will need to do anyway
+        // plus we can test for digits with a single comparison (<10)
         // Rather than two ('0' <= x && x <= '9')
-
-        // Non-digit chars of interest
-        static const Byte minus = ((Byte)'-') - '0';
+        // It does make comparing with '.', 'e', 'E' more complex but
+        // the -'0' for these can be done at compile time
         static const Byte point = ((Byte)'.') - '0';
         static const Byte lower_e = ((Byte)'e') - '0';
         static const Byte upper_e = ((Byte)'E') - '0';
-        static const Byte plus = ((Byte)'+') - '0';
 
         const MemoryInputStream mis = p->mis;
 
@@ -340,12 +389,13 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         int64_t exponent = 0;
         int sig_digits = 0;
 
-        Byte c = mis_take(mis) - '0';
+        Byte c = mis_take(mis);
 
-        if(c == minus) {
+        if(c == '-') {
                 negative = true;
-                c = mis_take(mis) - '0';
+                c = mis_take(mis);
         }
+        c -= '0';
         if(c < 10) {
                 sum = c;
                 sig_digits += (sum != 0);
@@ -370,19 +420,10 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 force_double = true;
 
                 c = mis_peek(mis) - '0';
-                if(c < 10) {
-                        mis_take(mis);
-                        if(sig_digits < max_sig_digits) {
-                                sum = 10 * sum + c;
-                                exponent--;
-                                sig_digits += (sum != 0);
-                        }
-                        c = mis_peek(mis) - '0';
-                } else {
+                if(c >= 10)
                         throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                }
 
-                while(c < 10) {
+                do {
                         mis_take(mis);
                         if(sig_digits < max_sig_digits) {
                                 sum = 10 * sum + c;
@@ -390,7 +431,8 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                                 sig_digits += (sum != 0);
                         }
                         c = mis_peek(mis) - '0';
-                }
+                } while(c < 10);
+
         }
         if(c == lower_e || c == upper_e) {
                 mis_take(mis);
@@ -398,29 +440,27 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                 int exp_sign = 1;
                 int exp = 0;
 
-                c = mis_peek(mis) - '0';
-                if(c == minus) {
+                c = mis_peek(mis);
+                if(c == '-') {
                         mis_take(mis);
                         exp_sign = -1;
-                        c = mis_peek(mis) - '0';
-                } else if(c == plus) {
+                        c = mis_peek(mis);
+                } else if(c == '+') {
                         mis_take(mis);
-                        c = mis_peek(mis) - '0';
+                        c = mis_peek(mis);
                 }
-                if(c < 10) {
+                c -= '0';
+                if(c >= 10)
+                        throw_parse_error(p, JSONPG_ERROR_NUMBER);
+
+               do {
                         mis_take(mis);
                         exp = 10 * exp + c;
+                        if(exp > 1000)
+                                throw_parse_error(p, JSONPG_ERROR_NUMBER);
                         c = mis_peek(mis) - '0';
-                        while(c < 10) {
-                                mis_take(mis);
-                                exp = 10 * exp + c;
-                                if(exp > 1000)
-                                        throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                                c = mis_peek(mis) - '0';
-                        }
-                } else {
-                        throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                }
+                } while (c < 10);
+
                 exponent += exp_sign * exp;
         }
         
@@ -529,7 +569,7 @@ Parser jsonpg_parser_new_opt(ParserOpts opts)
         }
 
         if(1 != (opts.bytes != NULL) + (opts.string != NULL) + (opts.dom != NULL)) {
-                opt_error(p);
+                p->result = make_error_return(JSONPG_ERROR_OPT, 0);
                 return p;
         }
 

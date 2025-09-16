@@ -3,14 +3,15 @@
 #include <stdio.h>
 #include <stddef.h>
 
-#define JSONPG_FLAG_COMMENTS                   0x01
-#define JSONPG_FLAG_TRAILING_COMMAS            0x02
-#define JSONPG_FLAG_SINGLE_QUOTES              0x04
-#define JSONPG_FLAG_UNQUOTED_KEYS              0x08
-#define JSONPG_FLAG_UNQUOTED_STRINGS           0x10
-#define JSONPG_FLAG_ESCAPE_CHARACTERS          0x20
-#define JSONPG_FLAG_OPTIONAL_COMMAS            0x40
-#define JSONPG_FLAG_IGNORE_TRAILING_CHARS      0x80
+#define JSONPG_FLAG_COMMENTS                   0x001
+#define JSONPG_FLAG_TRAILING_COMMAS            0x002
+#define JSONPG_FLAG_SINGLE_QUOTES              0x004
+#define JSONPG_FLAG_UNQUOTED_KEYS              0x008
+#define JSONPG_FLAG_UNQUOTED_STRINGS           0x010
+#define JSONPG_FLAG_ESCAPE_CHARACTERS          0x020
+#define JSONPG_FLAG_OPTIONAL_COMMAS            0x040
+#define JSONPG_FLAG_IGNORE_TRAILING_CHARS      0x080
+#define JSONPG_FLAG_MULTIPLE_VALUES            0x100 
 
 typedef enum {
         JSONPG_NONE,
@@ -34,7 +35,6 @@ typedef enum {
         JSONPG_ERROR_NONE,
         JSONPG_ERROR_OPT,
         JSONPG_ERROR_ALLOC,
-        JSONPG_ERROR_PARSE,
         JSONPG_ERROR_NUMBER,
         JSONPG_ERROR_UTF8,
         JSONPG_ERROR_SURROGATE,
@@ -52,7 +52,7 @@ typedef enum {
 } JsonpgErrorCode;
 
 typedef struct {
-        unsigned char *bytes;
+        const unsigned char *bytes;
         size_t count;
 } JsonpgStringInfo;
 
@@ -63,11 +63,12 @@ typedef union {
 
 typedef struct {
         JsonpgErrorCode code;
-        size_t at;
+        const char *text;
 } JsonpgErrorInfo;
 
 typedef struct {
         JsonpgType type;
+        size_t position;
         union {
                 JsonpgNumberInfo number;
                 JsonpgStringInfo string;
@@ -80,8 +81,8 @@ typedef struct {
         bool (*null)(void *ctx);
         bool (*integer)(void *ctx, long integer);
         bool (*real)(void *ctx, double real);
-        bool (*string)(void *ctx, unsigned char *bytes, size_t length);
-        bool (*key)(void *ctx, unsigned char *bytes , size_t length);
+        bool (*string)(void *ctx, const unsigned char *bytes, size_t length);
+        bool (*key)(void *ctx, const unsigned char *bytes , size_t length);
         bool (*start_array)(void *ctx);
         bool (*end_array)(void *ctx);
         bool (*start_object)(void *ctx);
@@ -256,8 +257,8 @@ bool jsonpg_null(JsonpgGenerator);
 bool jsonpg_boolean(JsonpgGenerator, bool);
 bool jsonpg_integer(JsonpgGenerator, long);
 bool jsonpg_real(JsonpgGenerator, double);
-bool jsonpg_string(JsonpgGenerator, unsigned char *, size_t);
-bool jsonpg_key(JsonpgGenerator, unsigned char *, size_t);
+bool jsonpg_string(JsonpgGenerator, const unsigned char *, size_t);
+bool jsonpg_key(JsonpgGenerator, const unsigned char *, size_t);
 bool jsonpg_start_array(JsonpgGenerator);
 bool jsonpg_end_array(JsonpgGenerator);
 bool jsonpg_start_object(JsonpgGenerator);

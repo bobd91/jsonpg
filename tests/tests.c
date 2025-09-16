@@ -3,8 +3,9 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 
-#include "../src/jsonpg.h"
+#include "../include/jsonpg.h"
 
 
 char *type_name(JsonpgType type) {
@@ -67,15 +68,15 @@ int main(int argc, char *argv[])
                                         fread(buf, length, 1, fh);
                                         res = (JsonpgResult){};
                                         for(int i = 0 ; i < times ; i++) {
-                                                JsonpgGenerator g = jsonpg_generator_new();
+                                                JsonpgGenerator g = jsonpg_generator_new(.dom = true, .max_nesting = 0);
                                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                                 if(res.type == JSONPG_ERROR) {
                                                         printf("Parse failed: %d at %ld\n", res.error.code, res.error.at);
                                                         return 1;
                                                 }
-                                                char *s = jsonpg_result_string(g);
+                                                //char *s = jsonpg_result_string(g);
                                                 //puts(s);
-                                                printf("JSON length: %ld\n", strlen(s));
+                                                //printf("JSON length: %ld\n", strlen(s));
                                                 jsonpg_generator_free(g);
                                         }
                                         free(buf);

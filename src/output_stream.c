@@ -214,7 +214,7 @@ static inline bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t c
                 if(chr > 0x7F) {
                         int len = utf8_validate_sequence(string + pmos2, count - pmos2);
                         if(len == -1) {
-                                jos->generator->error = make_error(JSONPG_ERROR_UTF8, 0);
+                                jos->generator->error = make_error(JSONPG_ERROR_UTF8);
                                 return false;
                         }
                         if(!mos_puts(mos, string + pmos2, len))
@@ -362,7 +362,7 @@ static inline bool print_boolean(void *ctx, bool is_true)
                                 : jos_puts(jos, (CBytes)"false", 5));
 }
 
-static inline bool print_string(void *ctx, Bytes bytes, size_t count)
+static inline bool print_string(void *ctx, const unsigned char *bytes, size_t count)
 {
         JsonOutputStream jos = ctx;
 
@@ -372,7 +372,7 @@ static inline bool print_string(void *ctx, Bytes bytes, size_t count)
                 && jos_put(jos, '"');
 }
 
-static inline bool print_key(void *ctx, Bytes bytes, size_t count)
+static inline bool print_key(void *ctx, const unsigned char *bytes, size_t count)
 {
         JsonOutputStream jos = ctx;
 
