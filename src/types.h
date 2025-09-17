@@ -82,6 +82,7 @@ struct jsonpg_generator_s {
         Allocator                       allocator;
         JsonpgCallbacks                 *callbacks;
         void                            *ctx;
+        bool                            validate_utf8;
         bool                            key_next;
         JsonpgErrorInfo                 error;
         size_t                          count;

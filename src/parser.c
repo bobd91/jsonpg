@@ -157,7 +157,7 @@ static inline void parse_null(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static inline unsigned parse_hex4(Parser p)
+static unsigned parse_hex4(Parser p)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -236,7 +236,7 @@ static inline Byte mis_consume_whitespace(MemoryInputStream mis)
 
 }
 
-static inline Byte consume_whitespace(Parser p, bool allow_comments)
+static Byte consume_whitespace(Parser p, bool allow_comments)
 {
         const MemoryInputStream mis = p->mis;
         Byte c;
@@ -257,9 +257,12 @@ static inline Byte consume_whitespace(Parser p, bool allow_comments)
                         mis_take(mis); // '*'
                         while(true) {
                                 c = mis_find(mis, '*');
-                                if(c == '*' && mis_consume(mis, '/'))
-                                        break;
-                                else if(mis_eof(mis))
+                                if(c == '*') {
+                                        mis_take(mis); // '*'
+                                        if(mis_consume(mis, '/'))
+                                                break;
+                                }
+                                if(mis_eof(mis))
                                         return '\0';
                         }
                 } else if(c == '/') {
@@ -272,7 +275,7 @@ static inline Byte consume_whitespace(Parser p, bool allow_comments)
         }
 }
 
-static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *bytes)
+static size_t parse_string_in_stream(Parser p, Bytes *bytes, const bool validate_utf8)
 {
         const MemoryInputStream mis = p->mis;
 
@@ -280,14 +283,14 @@ static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *by
 
         while(true) {
                 Byte c = mis_peek(mis);
-                if(c == terminator) {
+                if(c == '"') {
                         return mis_string_complete(mis, bytes);
                 } else if(c == '\\') {
                         mis_string_update(mis);
                         unsigned codepoint = parse_escape(p);
                         utf8_encode(codepoint, mis_writer(mis));
                         mis_string_restart(mis);
-                } else if(c >= 0x80) {
+                } else if(validate_utf8 && c >= 0x80) {
                         if(!mis_validate_utf8(mis))
                                 throw_parse_error(p, JSONPG_ERROR_UTF8);
                 } else if(c < 0x20) {
@@ -298,51 +301,12 @@ static inline size_t parse_string_in_stream(Parser p, Byte terminator, Bytes *by
         }
 }
 
-static inline size_t parse_nqstring_in_stream(Parser p, Bytes *bytes)
-{
-        static const char *terminators = " ,:]}\n\r\t";
-        const MemoryInputStream mis = p->mis;
-
-        mis_string_start(mis);
-
-        while(true) {
-                Byte c = mis_peek(mis);
-                if(c == '\\') {
-                        mis_string_update(mis);
-                        mis_byte_copy(mis);
-                        mis_string_restart(mis);
-                } else if(strchr(terminators, c)) {
-                        return mis_string_complete(mis, bytes);
-                } else if(c >= 0x80) {
-                        if(!mis_validate_utf8(mis))
-                                throw_parse_error(p, JSONPG_ERROR_UTF8);
-                } else if(c < 0x20) {
-                        throw_parse_error(p, JSONPG_ERROR_INVALID);
-                } else {
-                        mis_take(mis);
-                }
-        }
-}
-
-static inline size_t parse_string(Parser p, Bytes *bytes)
+static inline size_t parse_string(Parser p, Bytes *bytes, const bool validate_utf8)
 {
         ASSERT(mis_peek(p->mis) == '"');
 
         mis_take(p->mis); // "
-        return parse_string_in_stream(p, '"', bytes);
-}
-
-static inline size_t parse_sqstring(Parser p, Bytes *bytes)
-{
-        ASSERT(mis_peek(p->mis) == '\'');
-
-        mis_take(p->mis); // '
-        return parse_string_in_stream(p, '\'', bytes);
-}
-
-static inline size_t parse_nqstring(Parser p, Bytes *bytes)
-{
-        return parse_nqstring_in_stream(p, bytes);
+        return parse_string_in_stream(p, bytes, validate_utf8);
 }
 
 // This function, along with formatting numbers, takes much more cpu
@@ -555,7 +519,7 @@ void jsonpg_parser_free(Parser p)
 Parser jsonpg_parser_new_opt(ParserOpts opts)
 {
         uint16_t stack_size = get_stack_size(opts.max_nesting);
-        unsigned flags = opts.flags;
+        unsigned flags = opts.allow;
 
         Allocator a = allocator_new();
         if(!a)

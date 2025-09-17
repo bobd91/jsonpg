@@ -8,5 +8,5 @@ Some text
         2,
         // more comments
         3,
-        {"key" /* more */: "value"}
+        {"key" /* more /** */: "value"}
 ]

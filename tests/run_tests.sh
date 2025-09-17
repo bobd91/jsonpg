@@ -2,6 +2,7 @@
 
 root_dir="json"
 input_dir="${root_dir}/input"
+optional_dir="${root_dir}/optional"
 passed_dir="${root_dir}/passed"
 pretty_dir="${root_dir}/pretty"
 failed_dir="${root_dir}/failed"
@@ -86,6 +87,36 @@ if [ ! -d "$failed_dir" ]; then
         mkdir "$failed_dir"
 fi
 
+run_test() {
+        local s=$1
+        local infile=$2
+        local outfile=$3
+
+        #echo "Parse -s $s $infile and compare with $outfile"
+        if ./jsonpgtest -s $s $infile > temp.json 2>/dev/null; then
+                if [ ! -f $outfile ]; then
+                        ((++fcount))
+                        failed_msg "Unexpected pass: -s $s $infile"
+                elif ! diff -w temp.json $outfile > /dev/null; then
+                        ((++fcount))
+                        failed_msg "Unexpected output: -s $s $infile"
+                else
+                        ((++pcount))
+                fi
+        elif [ $? -eq 1 ];then
+
+                if [ -f $outfile ]; then
+                        ((++fcount))
+                        failed_msg "Unexpected fail: -s $s $infile"
+                else
+                        ((++pcount))
+                fi
+                cp $infile json/failed
+        else
+                echo "Parse -s $s $infile failed"
+        fi
+}
+
 main() {
         # ensure winsize gets updated
         (:)
@@ -94,7 +125,9 @@ main() {
 	init-term
 
         local files=(${input_dir}/*.json)
-        local len=$((10 * ${#files[@]}))
+        local opt_files=(${optional_dir}/*.json)
+        # 10 tests for each input file, 2 for each optional file
+        local len=$((10 * ${#files[@]} + 2 * ${#opt_files[@]}))
         local i
         local infile
         for infile in ${files[@]}; do
@@ -111,29 +144,9 @@ main() {
                         done
                         local outfile
                         outfile="${outdir}/${file}"
-                        #echo "Parse -s $s $infile and compare with $outfile"
-                        if ./jsonpgtest -s $s $infile > temp.json 2>/dev/null; then
-                                if [ ! -f $outfile ]; then
-                                        ((++fcount))
-                                        failed_msg "Unexpected pass: ${file}"
-                                elif ! diff -w temp.json $outfile > /dev/null; then
-                                        ((++fcount))
-                                        failed_msg "Unexpected output: $file"
-                                else
-                                        ((++pcount))
-                                fi
-                        elif [ $? -eq 1 ];then
 
-                                if [ -f $outfile ]; then
-                                        ((++fcount))
-                                        failed_msg "Unexpected fail: $file"
-                                else
-                                        ((++pcount))
-                                fi
-                                cp $infile json/failed
-                        else
-                                echo "Parse -s $s $infile failed"
-                        fi
+                        run_test "$s" "$infile" "$outfile"
+
                         ((i++))
                         if [ $fcount -eq 0 ]; then
                                 render_progress "$i" "$len" "$passed"
@@ -142,6 +155,25 @@ main() {
                         fi
                 done
         done
+
+        local s=11
+        for infile in ${opt_files[@]}; do
+                local p
+                local outfile="$passed_dir/$(basename $infile)"
+                for p in 1 2; do
+                        #echo "run_test $s $infile $outfile"
+                        run_test "$s" "$infile" "$outfile"
+                        ((s++))
+                        ((i++))
+                        if [ $fcount -eq 0 ]; then
+                                render_progress "$i" "$len" "$passed"
+                        else
+                                render_progress "$i" "$len" "$failed"
+                        fi
+                done
+        done
+
+
 
         if [ -f temp.json ]; then
                 rm temp.json

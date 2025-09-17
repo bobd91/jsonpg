@@ -45,8 +45,8 @@
 #ifndef JSONPG_MACROS
 #define JSONPG_MACROS
 
-#define object(...)             begin_object(), __VA_ARGS__, end_object()
-#define array(...)              begin_array(), __VA_ARGS__, end_array()
+#define object(...)             start_object(), __VA_ARGS__, end_object()
+#define array(...)              start_array(), __VA_ARGS__, end_array()
 
 #define key(S)                  jsonpg_key((JSONPG_GEN), (unsigned char *)(S), strlen(S))
 #define string(S)               jsonpg_string((JSONPG_GEN), (unsigned char *)(S), strlen(S))

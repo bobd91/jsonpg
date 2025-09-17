@@ -11,7 +11,7 @@ struct dom_node_s {
                 size_t count;
                 double real;
                 long integer;
-                Byte bytes[sizeof(size_t)];
+                Byte bytes[];
         } is;
 };
 
@@ -39,7 +39,7 @@ static inline size_t dom_alloc_size(size_t size)
         return dom_size_align(size);
 }
 
-static inline Dom dom_hdr_new(Allocator a, size_t size)
+static Dom dom_hdr_new(Allocator a, size_t size)
 {
         size = dom_alloc_size(size + sizeof(dom_s));
 
@@ -56,7 +56,7 @@ static inline Dom dom_hdr_new(Allocator a, size_t size)
         return hdr;
 }
 
-static inline DomNode dom_node_next(Dom root, size_t count)
+static DomNode dom_node_next(Dom root, size_t count)
 {
         size_t required = dom_size_align(count + 2 * NODE_SIZE);
         Dom hdr = root->current;
@@ -75,7 +75,7 @@ static inline DomNode dom_node_next(Dom root, size_t count)
         return (DomNode)(offset + (char *)hdr);
 }
 
-static inline DomNode dom_add_type(Dom root, JsonType type, size_t count)
+static DomNode dom_add_type(Dom root, JsonType type, size_t count)
 {
         DomNode node = dom_node_next(root, count);
         if(!node)

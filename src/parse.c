@@ -33,12 +33,11 @@ static void parse_generate(Parser p, Generator g)
 {
         const MemoryInputStream mis = p->mis;
         const unsigned flags = p->flags;
-        const bool opt_comments = flags & JSONPG_FLAG_COMMENTS;
-        const bool opt_single_quotes = flags & JSONPG_FLAG_SINGLE_QUOTES;
-        const bool opt_unquoted_keys = flags & JSONPG_FLAG_UNQUOTED_KEYS;
-        const bool opt_unquoted_strings = flags & JSONPG_FLAG_UNQUOTED_STRINGS;
-        const bool opt_trailing_commas = flags & JSONPG_FLAG_TRAILING_COMMAS;
-        const bool opt_optional_commas = flags & JSONPG_FLAG_OPTIONAL_COMMAS;
+        const bool opt_comments = flags & JSONPG_ALLOW_COMMENTS;
+        const bool opt_trailing_commas = flags & JSONPG_ALLOW_TRAILING_COMMAS;
+
+        // Easier for us to think in terms of validating rather than allowing invalid
+        const bool validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_IN);
 
         Bytes bytes;
         size_t count;
@@ -55,15 +54,10 @@ static void parse_generate(Parser p, Generator g)
         do {
 
                 if(stack_type == STACK_OBJECT) {
-                        if(b == '"')
-                                count = parse_string(p, &bytes);
-                        else if(opt_single_quotes && b == '\'')
-                                count = parse_sqstring(p, &bytes);
-                        else if(opt_unquoted_keys)
-                                count = parse_nqstring(p, &bytes);
-                        else
+                        if(b != '"')
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
 
+                        count = parse_string(p, &bytes, validate_utf8);
                         b = consume_whitespace(p, opt_comments);
                         if(b != ':')
                                 throw_parse_error(p, JSONPG_ERROR_EXPECTED_KEY);
@@ -117,7 +111,7 @@ static void parse_generate(Parser p, Generator g)
                         continue;
 
                 case '"':
-                        count = parse_string(p, &bytes);
+                        count = parse_string(p, &bytes, validate_utf8);
                         if(!jsonpg_string(g, bytes, count)) 
                                 throw_parse_error(p, JSONPG_ERROR_TERMINATED);
                         break;
@@ -153,14 +147,7 @@ static void parse_generate(Parser p, Generator g)
                                 } 
                                 break;
                         }
-
-                        if(!opt_unquoted_strings)
-                                throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
-
-                        count = parse_nqstring(p, &bytes);
-                        if(!jsonpg_string(g, bytes, count)) 
-                                throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        break;
+                        throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                 }
 
                 while(true) {
@@ -168,7 +155,8 @@ static void parse_generate(Parser p, Generator g)
                         if(b == ',') {
                                 mis_take(mis);
                                 b = consume_whitespace(p, opt_comments);
-                                if(!opt_trailing_commas)
+                                // Optional comma only if followed by } or ]
+                                if(!(opt_trailing_commas && (b == '}' || b == ']')))
                                         break;
                         }
                         if(b == '}'&& stack_type == STACK_OBJECT) {
@@ -179,8 +167,6 @@ static void parse_generate(Parser p, Generator g)
                                 stack_type = parse_end_array(p);
                                 if(!jsonpg_end_array(g))
                                         throw_parse_error(p, JSONPG_ERROR_TERMINATED);
-                        } else if(opt_optional_commas) {
-                                break;
                         } else if(stack_type == STACK_NONE) {
                                 more_todo = false;
                                 break;
@@ -198,8 +184,8 @@ static void parse_generate(Parser p, Generator g)
 
 static ParseResult parse(Parser p, Generator g)
 {
-        const bool multiple_values = p->flags & JSONPG_FLAG_MULTIPLE_VALUES;
-        const bool ignore_trailing = p->flags & JSONPG_FLAG_IGNORE_TRAILING_CHARS;
+        const bool multiple_values = p->flags & JSONPG_ALLOW_MULTIPLE_VALUES;
+        const bool trailing_chars = p->flags & JSONPG_ALLOW_TRAILING_CHARS;
 
         ParseResult val;
 
@@ -210,7 +196,7 @@ static ParseResult parse(Parser p, Generator g)
                         if(!mis_eof(p->mis)) {
                                 if(multiple_values)
                                         continue;
-                                if(!ignore_trailing)
+                                if(!trailing_chars)
                                         throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
                         }
                         break;
@@ -230,7 +216,7 @@ ParseResult jsonpg_parse_opt(ParseOpts opts)
         
         p = jsonpg_parser_new_opt((JsonpgParserOpts) {
                         .max_nesting = opts.max_nesting,
-                        .flags = opts.flags,
+                        .allow = opts.allow,
                         .bytes = opts.bytes,
                         .count = opts.count,
                         .dom = opts.dom
@@ -241,19 +227,17 @@ ParseResult jsonpg_parse_opt(ParseOpts opts)
                 return p->result;
 
         if(1 != (opts.callbacks != NULL) + (opts.generator != NULL)) {
-                p->result = make_error_return(JSONPG_ERROR_OPT, 0);
-                return p->result;
+                return make_error_return(JSONPG_ERROR_OPT, 0);
         }
 
         if(opts.callbacks) {
-                g = generator_new(0);
+                g = generator_new(0, p->flags);
                 if(!g) {
-                        p->result = make_error_return(JSONPG_ERROR_ALLOC, 0);
-                        return p->result;
+                        return make_error_return(JSONPG_ERROR_ALLOC, 0);
                 }
                 generator_set_callbacks(g, opts.callbacks, opts.ctx);
         } else {
-                g = generator_reset(opts.generator);
+                g = generator_reset(opts.generator, p->flags);
         }
         
         ParseResult result;

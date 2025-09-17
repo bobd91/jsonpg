@@ -3,15 +3,32 @@
 #include <stdio.h>
 #include <stddef.h>
 
-#define JSONPG_FLAG_COMMENTS                   0x001
-#define JSONPG_FLAG_TRAILING_COMMAS            0x002
-#define JSONPG_FLAG_SINGLE_QUOTES              0x004
-#define JSONPG_FLAG_UNQUOTED_KEYS              0x008
-#define JSONPG_FLAG_UNQUOTED_STRINGS           0x010
-#define JSONPG_FLAG_ESCAPE_CHARACTERS          0x020
-#define JSONPG_FLAG_OPTIONAL_COMMAS            0x040
-#define JSONPG_FLAG_IGNORE_TRAILING_CHARS      0x080
-#define JSONPG_FLAG_MULTIPLE_VALUES            0x100 
+// Allow some non-strict JSON behaviour
+// 'Or' values together where multiple are to be allowed
+// Pass in to .allow option when parsing/generating
+
+// Allow C style block and line comments
+#define JSONPG_ALLOW_COMMENTS                    0x01
+
+// Allow commas before end of arrays and objects
+#define JSONPG_ALLOW_TRAILING_COMMAS             0x02
+
+// Allow trailing characters in input after successful parse
+#define JSONPG_ALLOW_TRAILING_CHARS              0x04
+
+// Allow multiple JSON values in the input
+// If this is set then ALLOW_TRAILING_CHARS is ignored
+#define JSONPG_ALLOW_MULTIPLE_VALUES             0x08 
+
+// Allow invalid UTF8 sequences in the input
+#define JSONPG_ALLOW_INVALID_UTF8_IN             0x10
+
+// Allow invalid utf8 sequences in the output
+// It is up to a generator whether or not it validates utf8 sequences by default.
+// The only supplied generator that does is the default generator for creating 
+// JSON output, and it respects this setting
+#define JSONPG_ALLOW_INVALID_UTF8_OUT            0x20
+
 
 typedef enum {
         JSONPG_NONE,
@@ -103,8 +120,8 @@ typedef struct {
         // required to track array/object nesting
         unsigned short max_nesting;
 
-        // mask of JSONPG_FLAG_... values above
-        unsigned flags;
+        // mask of JSONPG_ALLOW_... values above
+        unsigned allow;
 
         // Input options, specify one type only
         //
@@ -135,21 +152,23 @@ JsonpgParser jsonpg_parser_new_opt(JsonpgParserOpts);
 JsonpgType jsonpg_parse_next(JsonpgParser);
 JsonpgResult jsonpg_parse_result(JsonpgParser);
 
-// Example, pull parsing from string
-//          allow single quotes to make JSON string creation simpler
+// Example, pull parsing from string that has trailing commas in it
 //
-// p = jsonpg_parser_new(.flags = JSONPG_FLAG_SINGLE_QUOTES
-//                       .string = "{'k1': [12.5, 'foo']}");
+// p = jsonpg_parser_new( .allow = JSONPG_ALLOW_TRAILING_COMMAS      
+//                        .string = "{\"k1\": [12.5, true,],}");
 // 
 // The comments below indicate what JSON items are parsed
 // The actual type of item is returned from jsonpg_parse_next
 // Values are recovered from jsonpg_parse_result(p)
 //
+// Note: true and false have their own JsonpgType variables
+//       there is no JsonpgType boolean
+//
 // jsonpg_parse_next(p); // type: begin_object
 // jsonpg_parse_next(p); // type: key, value: "k1"
 // jsonpg_parse_next(p); // type: begin_array
 // jsonpg_parse_next(p); // type: real, value: 12.5
-// jsonpg_parse_next(p); // type: string, value: "foo"
+// jsonpg_parse_next(p); // type: true
 // jsonpg_parse_next(p); // type: end_array
 // jsonpg_parse_next(p); // type: end_object
 // jsonpg_parse_next(p); // type: EOF
@@ -168,7 +187,7 @@ typedef struct {
         // The parser will be freed before returning
         // See parser_opts above for desriptions
         unsigned short max_nesting;
-        unsigned flags;      
+        unsigned allow;      
         unsigned char *bytes;
         size_t count;
         char *string;
@@ -192,10 +211,13 @@ JsonpgResult jsonpg_parse_opt(JsonpgParseOpts);
                                      __VA_ARGS__ })         
 
 // Example, parse a byte buffer and call callbacks with context
-// jsonpg_parse(.bytes = my_bytes, 
-//              .count = my_byte_count, 
-//              .callbacks = my_callbacks,
-//              .ctx = my_context);
+//          allow comments and multiple values in input
+//
+// jsonpg_parse( .allow = JSONPG_ALLOW_MULTIPLE_VALUES | JSONPG_ALLOW_COMMENTS
+//               .bytes = my_bytes, 
+//               .count = my_byte_count, 
+//               .callbacks = my_callbacks,
+//               .ctx = my_context);
 
 
 // ------------------------------------
@@ -204,8 +226,13 @@ JsonpgResult jsonpg_parse_opt(JsonpgParseOpts);
 
 typedef struct {
         // Pretty printing is ignored when writing to DOM or callbacks
-        unsigned indent;    // pretty printing indent, 0 = stringify
+        // Pretty printing indent, 0 = stringify
+        unsigned indent;    
         
+        // Currently the only value that effects generators is 
+        // JSONPG_ALLOW_INVALID_UTF8_OUT
+        unsigned allow;
+
         // Output options, specify max one type
         // If none are specified then the output will be buffered
         // and results will be available via jsonpg_result_string
@@ -237,9 +264,11 @@ JsonpgGenerator jsonpg_generator_new_opt(JsonpgGeneratorOpts);
                 (JsonpgGeneratorOpts){ .max_nesting = 1024, \
                                         __VA_ARGS__ })           
 
+
 // The lifetime of results is that of their generator.
 // A string or dom returned from these functions should not be used
 // once their generator has been freed
+
 JsonpgErrorInfo jsonpg_result_error(JsonpgGenerator);
 JsonpgDom jsonpg_result_dom(JsonpgGenerator);
 char *jsonpg_result_string(JsonpgGenerator);
@@ -248,11 +277,18 @@ size_t jsonpg_result_bytes(JsonpgGenerator, unsigned char **);
 void jsonpg_generator_free(JsonpgGenerator);
 
 // Write JSON items to a generator
+//
 // Functions return true if successful, false on error
-// Error information can be retrieved from jsonpg_result_error
+// The only errors returned will be out of memory or invalid utf8 output
+// both of which are quite unlikely, so you can probably get away with
+// creating output then checking for errors at the end.
+//
+// Error information can be retrieved from jsonpg_result_error.
+// An error code of JSON_ERROR_NONE indicates no errors.
 //
 // Macros to make building JSON more concise can be found in
 // jsonpg_def_macros.h
+
 bool jsonpg_null(JsonpgGenerator);
 bool jsonpg_boolean(JsonpgGenerator, bool);
 bool jsonpg_integer(JsonpgGenerator, long);

@@ -134,14 +134,15 @@ bool jsonpg_end_object(Generator g)
         return  (!g->callbacks->end_object) ||g->callbacks->end_object(g->ctx);
 }
 
-static Generator generator_reset(Generator g)
+static Generator generator_reset(Generator g, unsigned flags)
 {
         g->count = 0;
+        g->validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_OUT);
         g->error = (ErrorInfo) {};
         return g;
 }
 
-static Generator generator_new(uint16_t stack_size)
+static Generator generator_new(uint16_t stack_size, unsigned flags)
 {
         Allocator a = allocator_new();
         if(!a)
@@ -153,6 +154,7 @@ static Generator generator_new(uint16_t stack_size)
 
         g->allocator = a;
         g->key_next = false;
+        g->validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_OUT);
 
         g->stack = (struct stack_s) {
                 .ptr = 0,
@@ -183,12 +185,14 @@ void jsonpg_generator_free(Generator g)
 
 Generator jsonpg_generator_new_opt(GeneratorOpts opts)
 {
+        unsigned flags = opts.allow;
+
         if(1 < (opts.dom == true) + (opts.callbacks != NULL))
                 return NULL;
         
         unsigned indent = opts.indent <= 8 ? opts.indent : 8;
 
-        Generator g = generator_new(opts.max_nesting);
+        Generator g = generator_new(opts.max_nesting, flags);
         if(!g)
                 return NULL;
 

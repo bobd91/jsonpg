@@ -185,6 +185,8 @@ JsonpgResult parse_solution(int soln, FILE *fh)
         // Output (pretty/not pretty, with/without validation) -
         //         buffer (7 - 10)
         //
+        // Special tests 11-20, checks optional variations to parsing
+
         bool create_dom = false;
         bool parse_callback = false;
         JsonpgGenerator g = NULL;
@@ -193,18 +195,21 @@ JsonpgResult parse_solution(int soln, FILE *fh)
         if(soln < 3) {
                 create_dom = true;
                 g = jsonpg_generator_new(.dom = true);
-        } else if (soln < 4) { // not < 5 as 4 is parse_next an it cannot do this
+        } else if(soln < 4) { // not < 5 as 4 is parse_next an it cannot do this
                 parse_callback = true;
-        } else if (soln < 7) {
+        } else if(soln < 7) {
                 ctx_g = ctx_generator();
                 g = jsonpg_generator_new(
                                 .callbacks = &test_callbacks,
                                 .ctx = ctx_g);
-        } else if (soln < 9) {
+        } else if(soln < 9) {
                 g = jsonpg_generator_new(
                                 .indent = 4);
-        } else if(soln < 11) {
+        } else if(soln < 20) {
                 g = jsonpg_generator_new();
+        } else if(soln < 21) {
+                // Test 20 needs to create generator with this set up front
+                g = jsonpg_generator_new(.allow = JSONPG_ALLOW_INVALID_UTF8_OUT);
         }
 
         JsonpgResult res;
@@ -218,43 +223,64 @@ JsonpgResult parse_solution(int soln, FILE *fh)
 
         fread(buf, length, 1, fh);
 
-        if(soln % 2) {
-                if(create_dom) {
-                        res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
-                        ctx_g = ctx_generator();
-                        if(res.type == JSONPG_EOF) {
-                                res = jsonpg_parse(
-                                                .dom = jsonpg_result_dom(g),
-                                                .generator = ctx_g);
-                        }
-                } else if(parse_callback) {
-                        ctx_g = ctx_generator();
-                        res = jsonpg_parse(.bytes = buf, .count = length,
-                                        .callbacks = &test_callbacks,
-                                        .ctx = ctx_g);
-                } else {
-                        res = jsonpg_parse(.bytes = buf, 
-                                        .count = length, 
-                                        .generator = g);
-                }
-        } else {
-                JsonpgParser p = NULL;
-                if(create_dom) {
-                        res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
-                        if(res.type == JSONPG_EOF) {
+        if(soln <= 10) {
+                if(soln % 2) {
+                        if(create_dom) {
+                                res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                 ctx_g = ctx_generator();
-                                p = jsonpg_parser_new(.dom = jsonpg_result_dom(g));
-                                run_parse_next(p, ctx_g);
+                                if(res.type == JSONPG_EOF) {
+                                        res = jsonpg_parse(
+                                                        .dom = jsonpg_result_dom(g),
+                                                        .generator = ctx_g);
+                                }
+                        } else if(parse_callback) {
+                                ctx_g = ctx_generator();
+                                res = jsonpg_parse(.bytes = buf, .count = length,
+                                                .callbacks = &test_callbacks,
+                                                .ctx = ctx_g);
                         } else {
-                                printf("Returned type: %d\n", res.type);
-                                fail("Failed to create DOM\n");
+                                res = jsonpg_parse(.bytes = buf, 
+                                                .count = length, 
+                                                .generator = g);
                         }
                 } else {
-                        p = jsonpg_parser_new(.bytes = buf, .count = length);
-                        run_parse_next(p, g);
+                        JsonpgParser p = NULL;
+                        if(create_dom) {
+                                res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
+                                if(res.type == JSONPG_EOF) {
+                                        ctx_g = ctx_generator();
+                                        p = jsonpg_parser_new(.dom = jsonpg_result_dom(g));
+                                        run_parse_next(p, ctx_g);
+                                } else {
+                                        printf("Returned type: %d\n", res.type);
+                                        fail("Failed to create DOM\n");
+                                }
+                        } else {
+                                p = jsonpg_parser_new(.bytes = buf, .count = length);
+                                run_parse_next(p, g);
+                        }
+                        res = jsonpg_parse_result(p);
+                        jsonpg_parser_free(p);
                 }
-                res = jsonpg_parse_result(p);
-                jsonpg_parser_free(p);
+        } else if(soln < 21) {
+                static int flags[] = {
+                        JSONPG_ALLOW_COMMENTS,
+                        JSONPG_ALLOW_TRAILING_COMMAS,
+                        JSONPG_ALLOW_TRAILING_CHARS,
+                        JSONPG_ALLOW_MULTIPLE_VALUES,
+                        // Have to turn on allow out as well otherwise test will fail
+                        JSONPG_ALLOW_INVALID_UTF8_IN | JSONPG_ALLOW_INVALID_UTF8_OUT};
+
+                unsigned allow = flags[(soln - 11) / 2];
+
+                if(soln % 2) {
+                        res = jsonpg_parse(.allow = allow, .bytes = buf, .count = length, .generator = g);
+                } else {
+                        JsonpgParser p = jsonpg_parser_new(.allow = allow, .bytes = buf, .count = length);
+                        run_parse_next(p, g);
+                        res = jsonpg_parse_result(p);
+                        jsonpg_parser_free(p);
+                }
         }
 
         free(buf);
@@ -284,6 +310,17 @@ void usage(char *progname)
         printf("  8 - byte buffer => buffer => stdout             [P:N]\n");
         printf("  9 - byte buffer => buffer => stdout             [S:P]\n");
         printf(" 10 - byte buffer => buffer => stdout             [S:N]\n");
+        printf(" 11 - allow comments                              [S:P]\n");
+        printf(" 12 - allow comments                              [S:N]\n");
+        printf(" 13 - allow trailing commas                       [S:P]\n");
+        printf(" 14 - allow trailing commas                       [S:N]\n");
+        printf(" 15 - allow trailing chars                        [S:P]\n");
+        printf(" 16 - allow trailing chars                        [S:N]\n");
+        printf(" 17 - allow multiple values                       [S:P]\n");
+        printf(" 18 - allow multiple values                       [S:N]\n");
+        printf(" 19 - allow invalid utf8 in input & output        [S:P]\n");
+        printf(" 20 - allow invalid utf8 in input & output        [S:N]\n");
+
 }
                 
 int main(int argc, char *argv[]) {
@@ -298,12 +335,12 @@ int main(int argc, char *argv[]) {
                 }
         } else if(4 == argc && 0 == strcmp("-s", argv[1])) {
                 long l = strtol(argv[2], NULL, 10);
-                if(l > 0 && l < 11)
+                if(l > 0 && l < 21)
                         soln = l;
         }
 
         if(!soln)
-                fail("Usage: jsonpg [-s solution (1-10)] infile\n       jsonpg -h\n");
+                fail("Usage: jsonpg [-s solution (1-20)] infile\n       jsonpg -h\n");
 
 
         char *infile = argv[(2 == argc) ? 1 : 3];

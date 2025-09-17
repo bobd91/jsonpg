@@ -16,7 +16,7 @@ static const char * error_msgs[] = {
         [JSONPG_ERROR_UNEXPECTED]	= "Unexpected input",
         [JSONPG_ERROR_INVALID]	        = "Invalid input",
         [JSONPG_ERROR_TERMINATED]	= "Generator terminated",
-        [JSONPG_ERROR_EOF]	        = "Unexpected EOF"
+        [JSONPG_ERROR_EOF]	        = "Unexpected end of input"
 };
         
 
@@ -65,7 +65,9 @@ static void dump_g(Generator g)
 
 static const char *error_text(ErrorCode code)
 {
-        if(code < sizeof(error_msgs))
+        static const int msg_count = sizeof(error_msgs) / sizeof(error_msgs[0]);
+
+        if(code >= 0 && code < msg_count)
                 return error_msgs[code];
         else
                 return "Unknown error";

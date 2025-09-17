@@ -29,17 +29,7 @@ static MemoryOutputStream mos_new(Allocator a, size_t initial_capacity)
 
         return mos;
 }
-//
-// static void mos_reset(MemoryOutputStream mos)
-// {
-//         mos->count = 0;
-// }
-//
-// static size_t mos_length(MemoryOutputStream mos)
-// {
-//         return mos->count;
-// }
-//
+
 static Bytes mos_grow(MemoryOutputStream mos, size_t incr)
 {
         size_t size = mos->capacity 
@@ -104,13 +94,6 @@ static inline bool mos_puts(MemoryOutputStream mos, CBytes string, size_t count)
         memcpy(s, string, count);
         return true;
 }
-//
-// static Bytes mos_pop(MemoryOutputStream mos)
-// {
-//         mos->count = 0;
-//         return mos->buffer;
-// }
-//
 
 static inline void mos_adjust(MemoryOutputStream mos, long amount)
 {
@@ -156,29 +139,31 @@ static inline bool jos_put(JsonOutputStream jos, Byte chr)
 {
         return mos_put(jos->mos, chr);
 }
-//
-// static inline bool jos_putn(JsonOutputStream jos, Byte chr, size_t count)
-// {
-//         return mos_putn(jos->mos, chr, count);
-// }
-//
+
 static inline bool jos_puts(JsonOutputStream jos, CBytes string, size_t count)
 {
         return mos_puts(jos->mos, string, count);
 }
 
-static inline size_t find_next_special(CBytes string, size_t count, size_t start)
+static inline size_t find_next_special(
+                CBytes string, 
+                size_t count, 
+                size_t start, 
+                const bool validate_utf8)
 {
         size_t i;
         for(i = start ; i < count ; i++) {
                 Byte chr = string[i];
-                if(chr == '"' || chr == '\\' || chr < 0x20 || chr > 0x7F)
+                if(chr == '"' 
+                                || chr == '\\' 
+                                || chr < 0x20 
+                                || (validate_utf8 && chr >= 0x80))
                         return i;
         }
         return i;
 }
 
-static inline bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t count)
+static bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t count)
 {
         static char const * const s_escapes[] = {
                 "00", "01", "02", "03",
@@ -197,7 +182,9 @@ static inline bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t c
                 ['\\'] = '\\'
         };
 
-        MemoryOutputStream mos = jos->mos;
+        const bool validate_utf8 = jos->generator->validate_utf8;
+        const MemoryOutputStream mos = jos->mos;
+
         size_t pmos1 = 0;
         size_t pmos2 = 0;
         Byte chr;
@@ -205,13 +192,13 @@ static inline bool jos_scan_escape(JsonOutputStream jos, CBytes string, size_t c
 
         // TODO: find/validate outgoing UTF8 sequences 
         //       as assert or flag?
-        while(count > (pmos2 = find_next_special(string, count, pmos1))) {
+        while(count > (pmos2 = find_next_special(string, count, pmos1, validate_utf8))) {
                 chr = string[pmos2];
 
                 if(!mos_puts(mos, string + pmos1, pmos2 - pmos1))
                         return false;
                 
-                if(chr > 0x7F) {
+                if(validate_utf8 && chr >= 0x80) {
                         int len = utf8_validate_sequence(string + pmos2, count - pmos2);
                         if(len == -1) {
                                 jos->generator->error = make_error(JSONPG_ERROR_UTF8);
@@ -324,7 +311,7 @@ static inline bool jos_prefix_end(JsonOutputStream jos)
                 if(!jos_prefix(jos))
                         return false;
         }
-        jos->comma = true;
+        jos->comma = jos->level > 0;
 
         return true;
 }
