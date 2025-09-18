@@ -6,29 +6,29 @@
 
 #include "fast_double_parser.h"
 
-// Parser functions used by parse.c and parse_next.c
+// parser functions used by parse.c and parse_next.c
 
 #define MIN_STACK_SIZE 1024
 
-static inline bool parser_in_object(Parser p)
+static inline bool parser_in_object(parser *p)
 {
         return stack_peek(&p->stack) == STACK_OBJECT;
 }
 
-static inline bool parser_in_array(Parser p)
+static inline bool parser_in_array(parser *p)
 {
         return stack_peek(&p->stack) == STACK_ARRAY;
 }
 
-static size_t parse_position(Parser p)
+static size_t parse_position(parser *p)
 {
         return p->mis->start ? mis_tell(p->mis) : 0;
 }
 
-static ParseResult parse_result(Parser p, JsonType type, ...)
+static parse_result make_parse_result(parser *p, json_type type, ...)
 {
         va_list ap;
-        ParseResult result;
+        parse_result result;
         va_start(ap, type);
         
         result.type = type;
@@ -37,7 +37,7 @@ static ParseResult parse_result(Parser p, JsonType type, ...)
         switch(type) {
         case JSONPG_STRING:
         case JSONPG_KEY:
-                result.string.bytes = va_arg(ap, unsigned char *);
+                result.string.bytes = va_arg(ap, byte *);
                 result.string.count = va_arg(ap, size_t);
                 break;
         case JSONPG_REAL:
@@ -47,7 +47,7 @@ static ParseResult parse_result(Parser p, JsonType type, ...)
                 result.number.integer = va_arg(ap, long);
                 break;
         case JSONPG_ERROR:
-                result.error.code = va_arg(ap, ErrorCode);
+                result.error.code = va_arg(ap, error_code);
                 result.error.text = error_text(result.error.code);
                 break;
         default:
@@ -59,19 +59,19 @@ static ParseResult parse_result(Parser p, JsonType type, ...)
 }
 
 [[noreturn]]
-static void throw_parse_error_at(Parser p, ErrorCode error_code, size_t at)
+static void throw_parse_error_at(parser *p, error_code error_code, size_t at)
 {
         p->result = make_error_return(error_code, at);
         longjmp(p->env, 1);
 }
 
 [[noreturn]]
-static void throw_parse_error(Parser p, ErrorCode error_code)
+static void throw_parse_error(parser *p, error_code error_code)
 {
         throw_parse_error_at(p, error_code, parse_position(p));
 }
 
-static inline int parse_start_object(Parser p)
+static inline int parse_start_object(parser *p)
 {
         ASSERT(mis_peek(p->mis) == '{');
 
@@ -81,7 +81,7 @@ static inline int parse_start_object(Parser p)
         return STACK_OBJECT;
 }
 
-static inline int parse_end_object(Parser p)
+static inline int parse_end_object(parser *p)
 {
         ASSERT(mis_peek(p->mis) == '}');
         ASSERT(stack_peek(&p->stack) == STACK_OBJECT);
@@ -94,7 +94,7 @@ static inline int parse_end_object(Parser p)
         return type;
 }
 
-static inline int parse_start_array(Parser p)
+static inline int parse_start_array(parser *p)
 {
         ASSERT(mis_peek(p->mis) == '[');
 
@@ -104,7 +104,7 @@ static inline int parse_start_array(Parser p)
         return STACK_ARRAY;
 }
 
-static inline int  parse_end_array(Parser p)
+static inline int  parse_end_array(parser *p)
 {
         ASSERT(mis_peek(p->mis) == ']');
         ASSERT(stack_peek(&p->stack) == STACK_ARRAY);
@@ -117,9 +117,9 @@ static inline int  parse_end_array(Parser p)
         return type;
 }
 
-static inline void parse_true(Parser p)
+static inline void parse_true(parser *p)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         ASSERT(mis_peek(mis) == 't');
 
@@ -130,9 +130,9 @@ static inline void parse_true(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static inline void parse_false(Parser p)
+static inline void parse_false(parser *p)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         ASSERT(mis_peek(mis) == 'f');
 
@@ -144,9 +144,9 @@ static inline void parse_false(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static inline void parse_null(Parser p)
+static inline void parse_null(parser *p)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         ASSERT(mis_peek(mis) == 'n');
 
@@ -157,13 +157,13 @@ static inline void parse_null(Parser p)
                 throw_parse_error(p, JSONPG_ERROR_UNEXPECTED);
 }
 
-static unsigned parse_hex4(Parser p)
+static unsigned parse_hex4(parser *p)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         unsigned codepoint = 0;
         for(int i = 0 ; i < 4 ; i++) {
-                Byte c = mis_peek(mis);
+                byte c = mis_peek(mis);
                 codepoint <<= 4;
                 if(c >= '0' && c <= '9')
                         codepoint += (unsigned)(c - '0');
@@ -179,18 +179,18 @@ static unsigned parse_hex4(Parser p)
         return codepoint;
 }
 
-static unsigned parse_escape(Parser p)
+static unsigned parse_escape(parser *p)
 {
         static const unsigned char escape[256] = {
                 ['"'] = '"',  ['/'] = '/',  ['\\'] = '\\', ['b'] = '\b', 
                 ['f'] = '\f', ['n'] = '\n', ['r'] = '\r',  ['t'] = '\t'
         };
 
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         mis_take(mis); // '\\'
 
-        const Byte e = mis_peek(mis);
+        const byte e = mis_peek(mis);
 
         if(escape[e]) {
                 mis_take(mis);
@@ -225,9 +225,9 @@ static unsigned parse_escape(Parser p)
         }
 }
 
-static inline Byte mis_consume_whitespace(MemoryInputStream mis)
+static inline byte mis_consume_whitespace(memory_input_stream *mis)
 {
-        Byte c;
+        byte c;
 
         while((c = mis_peek(mis)) == ' ' || c == '\n' || c == '\r' || c== '\t')
                  mis_take(mis);
@@ -236,10 +236,10 @@ static inline Byte mis_consume_whitespace(MemoryInputStream mis)
 
 }
 
-static Byte consume_whitespace(Parser p, bool allow_comments)
+static byte consume_whitespace(parser *p, bool allow_comments)
 {
-        const MemoryInputStream mis = p->mis;
-        Byte c;
+        memory_input_stream *const mis = p->mis;
+        byte c;
 
         if(!allow_comments) {
                 return mis_consume_whitespace(mis);
@@ -275,14 +275,14 @@ static Byte consume_whitespace(Parser p, bool allow_comments)
         }
 }
 
-static size_t parse_string_in_stream(Parser p, Bytes *bytes, const bool validate_utf8)
+static size_t parse_string_in_stream(parser *p, byte **bytes, const bool validate_utf8)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         mis_string_start(mis);
 
         while(true) {
-                Byte c = mis_peek(mis);
+                byte c = mis_peek(mis);
                 if(c == '"') {
                         return mis_string_complete(mis, bytes);
                 } else if(c == '\\') {
@@ -301,7 +301,7 @@ static size_t parse_string_in_stream(Parser p, Bytes *bytes, const bool validate
         }
 }
 
-static inline size_t parse_string(Parser p, Bytes *bytes, const bool validate_utf8)
+static inline size_t parse_string(parser *p, byte **bytes, const bool validate_utf8)
 {
         ASSERT(mis_peek(p->mis) == '"');
 
@@ -324,7 +324,7 @@ static inline size_t parse_string(Parser p, Bytes *bytes, const bool validate_ut
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 
-static JsonType parse_number(Parser p, double *real_result, long *integer_result)
+static json_type parse_number(parser *p, double *real_result, long *integer_result)
 {
         // We only take the most significant digits
         // Max digits for long is 19
@@ -337,11 +337,11 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         // Rather than two ('0' <= x && x <= '9')
         // It does make comparing with '.', 'e', 'E' more complex but
         // the -'0' for these can be done at compile time
-        static const Byte point = ((Byte)'.') - '0';
-        static const Byte lower_e = ((Byte)'e') - '0';
-        static const Byte upper_e = ((Byte)'E') - '0';
+        static const byte point = ((byte)'.') - '0';
+        static const byte lower_e = ((byte)'e') - '0';
+        static const byte upper_e = ((byte)'E') - '0';
 
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
 
         // If fast parsing fails might need to call
         // strtod, which needs to start from the beginning
@@ -353,7 +353,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
         int64_t exponent = 0;
         int sig_digits = 0;
 
-        Byte c = mis_take(mis);
+        byte c = mis_take(mis);
 
         if(c == '-') {
                 negative = true;
@@ -445,7 +445,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
                         char *end = parse_float_strtod(start, real_result);
                         if(!end)
                                 throw_parse_error(p, JSONPG_ERROR_NUMBER);
-                        mis_adjust(mis, (Bytes)end);
+                        mis_adjust(mis, (byte *)end);
                 }
                 return JSONPG_REAL;
         } else {
@@ -455,7 +455,7 @@ static JsonType parse_number(Parser p, double *real_result, long *integer_result
 }
 #pragma GCC diagnostic pop
 
-static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
+static void parser_set_bytes(parser *p, byte *bytes, size_t count)
 {
         // Skip leading byte order mark
         unsigned skip = utf8_bom_bytes(bytes, count);
@@ -464,45 +464,45 @@ static void parser_set_bytes(Parser p, Bytes bytes, size_t count)
 
         // The advantages of having a null terminated, writeable, byte array
         // outweighs the cost of copying
-        Bytes b = allocator_alloc(p->allocator, count + 1);
+        byte *b = allocator_alloc(p->allocator, count + 1);
         memcpy(b, bytes, count);
         b[count] = '\0';
 
         mis_set_bytes(p->mis, b, count);
 }
 
-static void parser_set_dom_info(Parser p, DomInfo di)
+static void parser_set_dom_info(parser *p, dom_info di)
 {
         p->dom_info = di;
 }
 
-static inline uint16_t get_stack_size(uint16_t stack_size)
+static inline unsigned get_stack_size(uint16_t stack_size)
 {
         return stack_size > MIN_STACK_SIZE ? stack_size : MIN_STACK_SIZE;
 }
 
-static Parser parser_new(Allocator a, uint16_t stack_size, unsigned flags)
+static parser *parser_new(allocator *a, uint16_t stack_size, unsigned flags)
 {
         // The bit stack (keeps track of object/array nesting)
         // Is allocated space directly after the parser struct
-        size_t struct_bytes = sizeof(struct jsonpg_parser_s);
-        Parser p = allocator_alloc(a, struct_bytes + (unsigned)((stack_size + 7) / 8));
+        size_t struct_bytes = sizeof(parser);
+        parser *p = allocator_alloc(a, struct_bytes + (unsigned)((stack_size + 7) / 8));
         if(!p)
                 return NULL;
 
         p->allocator = a;
-        p->result = (ParseResult) {};
+        p->result = (parse_result) {};
 
         p->mis = mis_new(a);
         if(!p->mis)
                 return NULL;
 
-        p->dom_info = (DomInfo){};
+        p->dom_info = (dom_info){};
 
-        p->stack = (struct stack_s) {
+        p->stack = (stack) {
                 .ptr = 0,
                 .size = stack_size,
-                .stack = (((Byte *)p) + struct_bytes)
+                .stack = (((byte *)p) + struct_bytes)
         };
         p->state = STATE_START;
         p->flags = flags;
@@ -510,22 +510,22 @@ static Parser parser_new(Allocator a, uint16_t stack_size, unsigned flags)
         return p;
 }
 
-void jsonpg_parser_free(Parser p)
+void jsonpg_parser_free(parser *p)
 {
         allocator_free(p->allocator);
 }
 
 
-Parser jsonpg_parser_new_opt(ParserOpts opts)
+parser *jsonpg_parser_new_opt(parser_opts opts)
 {
-        uint16_t stack_size = get_stack_size(opts.max_nesting);
+        unsigned stack_size = get_stack_size(opts.max_nesting);
         unsigned flags = opts.allow;
 
-        Allocator a = allocator_new();
+        allocator *a = allocator_new();
         if(!a)
                 return NULL;
 
-        Parser p = parser_new(a, stack_size, flags);
+        parser *p = parser_new(a, stack_size, flags);
 
         if(!p) {
                 allocator_free(a);
@@ -540,7 +540,7 @@ Parser jsonpg_parser_new_opt(ParserOpts opts)
         if(opts.bytes) {
                 parser_set_bytes(p, opts.bytes, opts.count);
         } else if(opts.string) {
-                parser_set_bytes(p, (Bytes)opts.string, strlen(opts.string));
+                parser_set_bytes(p, (byte *)opts.string, strlen(opts.string));
         } else if(opts.dom) {
                 parser_set_dom_info(p, dom_parser_info(opts.dom));
         }
@@ -548,7 +548,7 @@ Parser jsonpg_parser_new_opt(ParserOpts opts)
         return p;
 }
 
-ParseResult jsonpg_parse_result(Parser p)
+parse_result jsonpg_parse_result(parser *p)
 {
         return p->result;
 }

@@ -6,50 +6,46 @@
 // Alias jsonpg types so we don't have to prefix our code
 // The only jsonpgs left in code should be 
 //  - the names of extern functions
-//  - the members of the JsonpgType and JsonpgErrorCode enums
+//  - the members of the jsonpg_type and jsonpg_error_code enums
 
-typedef JsonpgType                      JsonType;
-typedef JsonpgErrorCode                 ErrorCode;
-typedef JsonpgResult                    ParseResult;
-typedef JsonpgErrorInfo                 ErrorInfo;
-typedef JsonpgCallbacks                 Callbacks;
-typedef struct jsonpg_parser_s          parser_s;
-typedef JsonpgParser                    Parser;
-typedef struct jsonpg_generator_s       generator_s;
-typedef JsonpgGenerator                 Generator;
-typedef struct jsonpg_dom_s             dom_s;
-typedef JsonpgDom                       Dom;
-typedef JsonpgParserOpts                ParserOpts;
-typedef JsonpgParseOpts                 ParseOpts;
-typedef JsonpgGeneratorOpts             GeneratorOpts;
+typedef jsonpg_type                     json_type;
+typedef jsonpg_error_code               error_code;
+typedef jsonpg_result                   parse_result;
+typedef jsonpg_error_info               error_info;
+typedef jsonpg_callbacks                callbacks;
+typedef struct jsonpg_parser            parser;
+typedef struct jsonpg_generator         generator;
+typedef struct jsonpg_dom               dom;
+typedef jsonpg_parser_opts              parser_opts;
+typedef jsonpg_parse_opts               parse_opts;
+typedef jsonpg_generator_opts           generator_opts;
 
 
 // Shared project structures and typedefs
 
-typedef unsigned char                   Byte;
-typedef unsigned char                   *Bytes;
-typedef const unsigned char             *CBytes;
+typedef unsigned char                   byte;
 
-typedef struct allocator_s              *Allocator;
-typedef struct memory_input_stream_s    *MemoryInputStream;
-typedef struct memory_output_stream_s   *MemoryOutputStream;
-typedef struct cow_stream_s             *CowStream;
-typedef struct stack_s                  *Stack;
+typedef struct allocator                allocator;
+typedef struct memory_input_stream      memory_input_stream;
+typedef struct memory_output_stream     memory_output_stream;
+typedef struct json_output_stream       json_output_stream;
+typedef struct stack                    stack;
+typedef struct dom_info                 dom_info;
 
 #define STACK_OBJECT 0
 #define STACK_ARRAY  1
 #define STACK_NONE   2
 
-struct stack_s {
-       uint16_t ptr;
-       uint16_t size;
-       Bytes    stack;
+struct stack {
+       unsigned ptr;
+       unsigned size;
+       byte     *stack;
 };
 
-typedef struct dom_info_s {
-        Dom     hdr;
+struct dom_info {
+        dom     *hdr;
         size_t  offset;
-} DomInfo;
+};
 
 // For pull parser to keep track of where it is up to
 typedef enum {
@@ -63,36 +59,36 @@ typedef enum {
         STATE_ARRAY_COMMA,
         STATE_DONE,
         STATE_EOF
-} ParseState;
+} parse_state;
 
 // Types exposed by library via opaque pointer
 
-struct jsonpg_parser_s {
+struct jsonpg_parser {
         unsigned                        flags;
-        Allocator                       allocator;
-        MemoryInputStream               mis;
-        ParseState                      state;
-        DomInfo                         dom_info;
-        ParseResult                     result;
+        allocator                       *allocator;
+        memory_input_stream             *mis;
+        parse_state                     state;
+        dom_info                        dom_info;
+        parse_result                    result;
         jmp_buf                         env;
-        struct stack_s                  stack;
+        stack                           stack;
 };
 
-struct jsonpg_generator_s {
-        Allocator                       allocator;
-        JsonpgCallbacks                 *callbacks;
+struct jsonpg_generator {
+        allocator                       *allocator;
+        callbacks                       *callbacks;
         void                            *ctx;
         bool                            validate_utf8;
         bool                            key_next;
-        JsonpgErrorInfo                 error;
+        error_info                      error;
         size_t                          count;
-        struct stack_s                  stack;
+        stack                           stack;
 };
 
-struct jsonpg_dom_s {
-        Allocator allocator;
-        Dom next;
-        Dom current;
-        size_t count;
-        size_t size;
+struct jsonpg_dom {
+        allocator                       *allocator;
+        dom                             *next;
+        dom                             *current;
+        size_t                          count;
+        size_t                          size;
 };

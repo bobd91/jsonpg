@@ -4,7 +4,7 @@
  * // This define specifies the name of your generator variable
  * // defaults to 'gen' 
  * #define JSONPG_GEN  my_gen
- * jsonpg_generator my_gen = jsonpg_generator_new(...);
+ * jsonpg_generator *my_gen = jsonpg_generator_new(...);
  *
  * #include <libjsonpg/jsonpg_def_macros.h>
  *

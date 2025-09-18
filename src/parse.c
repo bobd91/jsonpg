@@ -1,5 +1,5 @@
 /*
- * Use the Parser to parse JSON values and pass the results to the Generator
+ * Use the parser to parse JSON values and pass the results to the generator 
  * 
  * Given the nested nature of JSON it would make sense to parse 
  * arrays and objects recursively however that can run into stack problems
@@ -29,17 +29,17 @@
  *   top level, or we need to go round again
  */
 
-static void parse_generate(Parser p, Generator g)
+static void parse_generate(parser *p, generator *g)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
         const unsigned flags = p->flags;
         const bool opt_comments = flags & JSONPG_ALLOW_COMMENTS;
         const bool opt_trailing_commas = flags & JSONPG_ALLOW_TRAILING_COMMAS;
-
+ 
         // Easier for us to think in terms of validating rather than allowing invalid
         const bool validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_IN);
 
-        Bytes bytes;
+        byte *bytes;
         size_t count;
 
         bool more_todo = true;
@@ -49,7 +49,7 @@ static void parse_generate(Parser p, Generator g)
         // STACK_ARRY   - in an array
         int stack_type = STACK_NONE;
 
-        Byte b = consume_whitespace(p, opt_comments);
+        byte b = consume_whitespace(p, opt_comments);
 
         do {
 
@@ -182,12 +182,12 @@ static void parse_generate(Parser p, Generator g)
 
 }
 
-static ParseResult parse(Parser p, Generator g)
+static parse_result parse(parser *p, generator *g)
 {
         const bool multiple_values = p->flags & JSONPG_ALLOW_MULTIPLE_VALUES;
         const bool trailing_chars = p->flags & JSONPG_ALLOW_TRAILING_CHARS;
 
-        ParseResult val;
+        parse_result val;
 
         if(0 == setjmp(p->env)) {
                 while(true) {
@@ -201,7 +201,7 @@ static ParseResult parse(Parser p, Generator g)
                         }
                         break;
                 }
-                val = parse_result(p, JSONPG_EOF);
+                val = make_parse_result(p, JSONPG_EOF);
         } else {
                 val = make_pg_error_return(p, g);
         }
@@ -209,12 +209,12 @@ static ParseResult parse(Parser p, Generator g)
         return val;
 }
 
-ParseResult jsonpg_parse_opt(ParseOpts opts)
+parse_result jsonpg_parse_opt(parse_opts opts)
 {
-        Generator g;
-        Parser p;
+        generator *g;
+        parser *p;
         
-        p = jsonpg_parser_new_opt((JsonpgParserOpts) {
+        p = jsonpg_parser_new_opt((parser_opts) {
                         .max_nesting = opts.max_nesting,
                         .allow = opts.allow,
                         .bytes = opts.bytes,
@@ -240,7 +240,7 @@ ParseResult jsonpg_parse_opt(ParseOpts opts)
                 g = generator_reset(opts.generator, p->flags);
         }
         
-        ParseResult result;
+        parse_result result;
         if(opts.dom)
                 result = dom_parse(p, g);
         else

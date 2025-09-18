@@ -8,7 +8,7 @@
 #include "../include/jsonpg.h"
 
 
-char *type_name(JsonpgType type) {
+char *type_name(jsonpg_type type) {
         static char *names[] = {
                 "None",
                 "Pull",
@@ -31,8 +31,8 @@ char *type_name(JsonpgType type) {
 
 int main(int argc, char *argv[])
 {
-        JsonpgGenerator g;
-        JsonpgResult res;
+        jsonpg_generator *g;
+        jsonpg_result res;
         if(argc == 3) {
                 if(0 == strcmp("-e", argv[1])) {
                         puts(argv[2]);
@@ -66,12 +66,12 @@ int main(int argc, char *argv[])
                                 uint8_t *buf = malloc(length + 1);
                                 if(buf) {
                                         fread(buf, length, 1, fh);
-                                        res = (JsonpgResult){};
+                                        res = (jsonpg_result){};
                                         for(int i = 0 ; i < times ; i++) {
-                                                JsonpgGenerator g = jsonpg_generator_new(.dom = true, .max_nesting = 0);
+                                                jsonpg_generator *g = jsonpg_generator_new(.dom = true, .max_nesting = 0);
                                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                                 if(res.type == JSONPG_ERROR) {
-                                                        printf("Parse failed: %d at %ld\n", res.error.code, res.error.at);
+                                                        printf("Parse failed: %d at %ld\n", res.error.code, res.position);
                                                         return 1;
                                                 }
                                                 //char *s = jsonpg_result_string(g);
@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
         if(res.type == JSONPG_EOF)
                 printf("\n\nResult EOF: %d\n", res.type);
         else
-                printf("\n\nResult : %d (%d[%ld])\n", res.type, res.error.code, res.error.at);
+                printf("\n\nResult : %d (%d[%ld])\n", res.type, res.error.code, res.position);
 }
 
 

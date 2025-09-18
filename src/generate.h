@@ -1,5 +1,5 @@
 #pragma once
 
-static Generator generator_new(uint16_t, unsigned);
-static Generator generator_set_callbacks(Generator, Callbacks *callbacks, void *ctx);
-static Generator generator_reset(Generator, unsigned);
+static generator *generator_new(unsigned, unsigned);
+static generator *generator_set_callbacks(generator *, callbacks *callbacks, void *ctx);
+static generator *generator_reset(generator *, unsigned);

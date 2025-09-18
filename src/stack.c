@@ -1,14 +1,14 @@
 #include <stdint.h>
 
-static inline int stack_peek(Stack s)
+static inline int stack_peek(stack *s)
 {
         if(s->ptr == 0)
                 return -1;
-        uint16_t sp = s->ptr - 1;
+        unsigned sp = s->ptr - 1;
         return 0x01 & s->stack[sp >> 3] >> (sp & 0x07);
 }
 
-static inline int stack_pop(Stack s) 
+static inline int stack_pop(stack *s) 
 {
         if(s->ptr == 0)
                 return -1;
@@ -17,19 +17,19 @@ static inline int stack_pop(Stack s)
                 return STACK_NONE;
         } else {
                 --s->ptr;
-                uint16_t sp = s->ptr - 1;
+                unsigned sp = s->ptr - 1;
                 // 0 or 1
                 return 0x01 & s->stack[sp >> 3] >> (sp & 0x07);
         }
 }
 
-static inline int stack_push(Stack s, int type) 
+static inline int stack_push(stack *s, int type) 
 {
-        uint16_t sp = s->ptr;
+        unsigned sp = s->ptr;
         if(sp >= s->size) 
                 return -1;
-        Byte offset = (Byte)(sp >> 3);
-        Byte mask = 1 << (sp & 0x07);
+        byte offset = (byte)(sp >> 3);
+        byte mask = 1 << (sp & 0x07);
         
         if(type == STACK_ARRAY)
                 s->stack[offset] |= mask;

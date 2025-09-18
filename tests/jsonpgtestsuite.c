@@ -8,7 +8,7 @@
 
 #include "../include/jsonpg_def_macros.h"
 
-#define test_start() JsonpgGenerator gen = ctx
+#define test_start() jsonpg_generator *gen = ctx
 #define test_end()   return true;
 
 bool test_null(void *ctx)
@@ -107,7 +107,7 @@ void *ctx_generator(void) {
         return jsonpg_generator_new(.max_nesting = 0);
 }
 
-JsonpgCallbacks test_callbacks = {
+jsonpg_callbacks test_callbacks = {
         .null = test_null,
         .boolean = test_boolean,
         .integer = test_integer,
@@ -126,10 +126,10 @@ void fail(char *msg)
         exit(1);
 }
 
-void run_parse_next(JsonpgParser p, JsonpgGenerator g)
+void run_parse_next(jsonpg_parser *p, jsonpg_generator *g)
 {
         bool abort = false;
-        JsonpgResult res;
+        jsonpg_result res;
         while(!(abort || JSONPG_EOF == jsonpg_parse_next(p))) {
                 res = jsonpg_parse_result(p);
                 switch(res.type) {
@@ -171,7 +171,7 @@ void run_parse_next(JsonpgParser p, JsonpgGenerator g)
 }
 
 
-JsonpgResult parse_solution(int soln, FILE *fh)
+jsonpg_result parse_solution(int soln, FILE *fh)
 {
         // Input - 
         //      buffer
@@ -189,8 +189,8 @@ JsonpgResult parse_solution(int soln, FILE *fh)
 
         bool create_dom = false;
         bool parse_callback = false;
-        JsonpgGenerator g = NULL;
-        JsonpgGenerator ctx_g = NULL;
+        jsonpg_generator *g = NULL;
+        jsonpg_generator *ctx_g = NULL;
 
         if(soln < 3) {
                 create_dom = true;
@@ -212,7 +212,7 @@ JsonpgResult parse_solution(int soln, FILE *fh)
                 g = jsonpg_generator_new(.allow = JSONPG_ALLOW_INVALID_UTF8_OUT);
         }
 
-        JsonpgResult res;
+        jsonpg_result res;
 
         fseek(fh, 0L, SEEK_END);
         long length = ftell(fh);
@@ -244,7 +244,7 @@ JsonpgResult parse_solution(int soln, FILE *fh)
                                                 .generator = g);
                         }
                 } else {
-                        JsonpgParser p = NULL;
+                        jsonpg_parser *p = NULL;
                         if(create_dom) {
                                 res = jsonpg_parse(.bytes = buf, .count = length, .generator = g);
                                 if(res.type == JSONPG_EOF) {
@@ -276,7 +276,7 @@ JsonpgResult parse_solution(int soln, FILE *fh)
                 if(soln % 2) {
                         res = jsonpg_parse(.allow = allow, .bytes = buf, .count = length, .generator = g);
                 } else {
-                        JsonpgParser p = jsonpg_parser_new(.allow = allow, .bytes = buf, .count = length);
+                        jsonpg_parser *p = jsonpg_parser_new(.allow = allow, .bytes = buf, .count = length);
                         run_parse_next(p, g);
                         res = jsonpg_parse_result(p);
                         jsonpg_parser_free(p);
@@ -350,7 +350,7 @@ int main(int argc, char *argv[]) {
 
 
 
-        JsonpgResult v = parse_solution(soln, fh);
+        jsonpg_result v = parse_solution(soln, fh);
         fclose(fh);
         int ret = (v.type == JSONPG_EOF) ? 0 : 1;
         if(ret)

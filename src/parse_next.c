@@ -24,7 +24,7 @@
  * STATE_ARRAY_COMMA    - in array after , 
  */ 
 
-static inline ParseState state_change_value(ParseState state)
+static inline parse_state state_change_value(parse_state state)
 {
         if(state == STATE_START) return STATE_DONE;
         if(state == STATE_KEY) return STATE_KEY_VALUE;
@@ -32,101 +32,101 @@ static inline ParseState state_change_value(ParseState state)
         assert(false && "Invalid state");
 }
 
-static inline ParseState state_change_end(Parser p)
+static inline parse_state state_change_end(parser *p)
 {
         if(parser_in_object(p)) return STATE_KEY_VALUE; 
         if(parser_in_array(p)) return STATE_ARRAY_VALUE; 
         return STATE_DONE;
 }
 
-static inline JsonType accept_boolean(Parser p, bool is_true)
+static inline json_type accept_boolean(parser *p, bool is_true)
 {
         p->state = state_change_value(p->state);
-        p->result = parse_result(p,
+        p->result = make_parse_result(p,
                          is_true ? JSONPG_TRUE : JSONPG_FALSE);
         return p->result.type;
 }
 
-static inline JsonType accept_null(Parser p)
+static inline json_type accept_null(parser *p)
 {
         p->state = state_change_value(p->state);
-        p->result = parse_result(p, JSONPG_NULL);
+        p->result = make_parse_result(p, JSONPG_NULL);
         return p->result.type;
 }
 
-static inline JsonType accept_integer(Parser p, long integer)
+static inline json_type accept_integer(parser *p, long integer)
 {
         p->state = state_change_value(p->state);
-        p->result = parse_result(p, JSONPG_INTEGER, integer);
+        p->result = make_parse_result(p, JSONPG_INTEGER, integer);
         return p->result.type;
 }
 
-static inline JsonType accept_real(Parser p, double real)
+static inline json_type accept_real(parser *p, double real)
 {
         p->state = state_change_value(p->state);
-        p->result = parse_result(p, JSONPG_REAL, real);
+        p->result = make_parse_result(p, JSONPG_REAL, real);
         return p->result.type;
 }
 
-static inline JsonType accept_string(Parser p, Bytes bytes, size_t count)
+static inline json_type accept_string(parser *p, byte *bytes, size_t count)
 {
         p->state = state_change_value(p->state);
-        p->result = parse_result(p, JSONPG_STRING, bytes, count);
+        p->result = make_parse_result(p, JSONPG_STRING, bytes, count);
         return p->result.type;
 }
 
-static inline JsonType accept_key(Parser p, Bytes bytes, size_t count)
+static inline json_type accept_key(parser *p, byte *bytes, size_t count)
 {
         p->state = STATE_KEY;
-        p->result = parse_result(p, JSONPG_KEY, bytes, count);
+        p->result = make_parse_result(p, JSONPG_KEY, bytes, count);
         return p->result.type;
 }
 
-static inline JsonType accept_start_object(Parser p)
+static inline json_type accept_start_object(parser *p)
 {
         p->state = STATE_OBJECT;
-        p->result = parse_result(p, JSONPG_START_OBJECT);
+        p->result = make_parse_result(p, JSONPG_START_OBJECT);
         return p->result.type;
 }
 
-static inline JsonType accept_end_object(Parser p)
+static inline json_type accept_end_object(parser *p)
 {
         p->state = state_change_end(p);
-        p->result = parse_result(p, JSONPG_END_OBJECT);
+        p->result = make_parse_result(p, JSONPG_END_OBJECT);
         return p->result.type;
 }
 
-static inline JsonType accept_start_array(Parser p)
+static inline json_type accept_start_array(parser *p)
 {
         p->state = STATE_ARRAY;
-        p->result = parse_result(p, JSONPG_START_ARRAY);
+        p->result = make_parse_result(p, JSONPG_START_ARRAY);
         return p->result.type;
 }
 
-static inline JsonType accept_end_array(Parser p)
+static inline json_type accept_end_array(parser *p)
 {
         p->state = state_change_end(p);
-        p->result = parse_result(p, JSONPG_END_ARRAY);
+        p->result = make_parse_result(p, JSONPG_END_ARRAY);
         return p->result.type;
 }
 
-static inline JsonType accept_eof(Parser p)
+static inline json_type accept_eof(parser *p)
 {
-        p->result = parse_result(p, JSONPG_EOF);
+        p->result = make_parse_result(p, JSONPG_EOF);
         return p->result.type;
 }
 
-static JsonType parse_next(Parser p)
+static json_type parse_next(parser *p)
 {
-        const MemoryInputStream mis = p->mis;
+        memory_input_stream *const mis = p->mis;
         const bool opt_comments = p->flags & JSONPG_ALLOW_COMMENTS;
         const bool validate_utf8 = !(p->flags & JSONPG_ALLOW_INVALID_UTF8_IN);
         
-        ParseState state = p->state;
-        unsigned char *bytes;
+        parse_state state = p->state;
+        byte *bytes;
         size_t count;
         
-        Byte b = consume_whitespace(p, opt_comments);
+        byte b = consume_whitespace(p, opt_comments);
 
         if(state == STATE_EOF)
                 throw_parse_error(p, JSONPG_ERROR_EOF);
@@ -268,7 +268,7 @@ static JsonType parse_next(Parser p)
 
 }
 
-static JsonType parser_parse_next(Parser p)
+static json_type parser_parse_next(parser *p)
 {
         if(0 == setjmp(p->env))
                 return parse_next(p);
@@ -276,7 +276,7 @@ static JsonType parser_parse_next(Parser p)
         return p->result.type;
 }
 
-JsonType jsonpg_parse_next(Parser p)
+json_type jsonpg_parse_next(parser *p)
 {
         if(p->mis->start)
                 return parser_parse_next(p);

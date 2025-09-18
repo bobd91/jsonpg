@@ -24,17 +24,15 @@ void jsonpg_set_allocators(
 // Internally it just keeps track of all allocations so that it can free
 // them when the allocator is freed.
 
-typedef struct allocator_s *Allocator;
-
-struct allocator_s {
+struct allocator {
         size_t used;
         size_t capacity;
-        void ** allocs;
+        void **allocs;
 };
 
-static Allocator allocator_new()
+static allocator *allocator_new()
 {
-        Allocator a = pg_alloc(sizeof(struct allocator_s));
+        allocator *a = pg_alloc(sizeof(allocator));
         if(!a)
                 return NULL;
 
@@ -54,7 +52,7 @@ static Allocator allocator_new()
         return a;
 }
 
-static void allocator_free(Allocator a)
+static void allocator_free(allocator *a)
 {
         if(!a)
                 return;
@@ -71,7 +69,7 @@ static void allocator_free(Allocator a)
         pg_dealloc(a);
 }
 
-static void *allocator_alloc(Allocator a, size_t size)
+static void *allocator_alloc(allocator *a, size_t size)
 {
         if(a->used == a->capacity) {
                 void **new_a = pg_realloc(a->allocs, a->capacity << 1);
@@ -91,7 +89,7 @@ static void *allocator_alloc(Allocator a, size_t size)
         return p;
 }
 
-static void *allocator_realloc(Allocator a, void *p, size_t new_size)
+static void *allocator_realloc(allocator *a, void *p, size_t new_size)
 {
         for(size_t i = 0 ; i < a->used ; i++) {
                 if(p == a->allocs[i]) {

@@ -21,7 +21,7 @@ static const char * error_msgs[] = {
         
 
 #ifdef JSONPG_DEBUG
-static void dump_p(Parser p)
+static void dump_p(parser *p)
 {
         fprintf(stderr, "Parser Error:\n");
         fprintf(stderr, "Error: %d\n", p->result.error.code);
@@ -45,7 +45,7 @@ static void dump_p(Parser p)
 
 }
 
-static void dump_g(Generator g)
+static void dump_g(generator *g)
 {
         fprintf(stderr, "Generator Error:\n");
         fprintf(stderr, "Error: %d\n", g->error.code);
@@ -63,7 +63,7 @@ static void dump_g(Generator g)
 }
 #endif
 
-static const char *error_text(ErrorCode code)
+static const char *error_text(error_code code)
 {
         static const int msg_count = sizeof(error_msgs) / sizeof(error_msgs[0]);
 
@@ -73,26 +73,26 @@ static const char *error_text(ErrorCode code)
                 return "Unknown error";
 }
 
-static ErrorInfo make_error(ErrorCode code)
+static error_info make_error(error_code code)
 {
-        return (ErrorInfo){ 
+        return (error_info){ 
                 .code = code, 
                 .text = error_text(code)
         };
 }
 
-static ParseResult make_error_return(ErrorCode code, size_t at)
+static parse_result make_error_return(error_code code, size_t at)
 {
-        return (ParseResult) {
+        return (parse_result) {
                         .type = JSONPG_ERROR,
                         .position = at,
                         .error = make_error(code)
         };
 }
 
-static ParseResult make_pg_error_return(Parser p, Generator g)
+static parse_result make_pg_error_return(parser *p, generator *g)
 {
-        ParseResult r = p->result;
+        parse_result r = p->result;
         if(r.type == JSONPG_ERROR) {
                 // Terminations come from generator
                 // Which MAY have set error info

@@ -1,3 +1,3 @@
 #pragma once
 
-static Generator dom_generator(Generator);
+static generator *dom_generator(generator *);

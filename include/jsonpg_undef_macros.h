@@ -2,6 +2,8 @@
 #ifdef JSONPG_MACROS
 #undef JSONPG_MACROS
 
+#undef JSONPG_GEN
+
 #undef object
 #undef array
 

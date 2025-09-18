@@ -72,17 +72,17 @@ static inline bool is_valid_codepoint(unsigned cp)
  * Will fail silently on non-debug build if an invalid codepoint is supplied
  * In a debug build it will fail an assertion
  */      
-static void utf8_encode(unsigned cp, Bytes *bytes) 
+static void utf8_encode(unsigned cp, byte **bytes) 
 {
         int shift = 0;
-        Byte lead_byte;
+        byte lead_byte;
         if(cp <= _1_BYTE_MAX) {
                 // Ascii, just one byte
-                lead_byte = (Byte)cp;
+                lead_byte = (byte)cp;
         } else if(cp <= _2_BYTE_MAX) {
                 // 2 byte UTF8, byte 1 is 110 and highest 5 bits
                 shift = 6;
-                lead_byte = (Byte)(_2_BYTE_LEADER 
+                lead_byte = (byte)(_2_BYTE_LEADER 
                                         | LO_5_BITS(cp >> shift));
         } else if(is_surrogate(cp)) {
                 // UTF-16 surrogates are not legal Unicode
@@ -91,12 +91,12 @@ static void utf8_encode(unsigned cp, Bytes *bytes)
         } else if(cp <= _3_BYTE_MAX) {
                 // 3 byte UTF8, byte 1 is 1110 and highest 4 bits
                 shift = 12;
-                lead_byte = (Byte)(_3_BYTE_LEADER 
+                lead_byte = (byte)(_3_BYTE_LEADER 
                                         | LO_4_BITS(cp >> shift));
         } else if(cp <= CODEPOINT_MAX) {
                 // 4 byte UTF8, byte 1 is 11110 and highest 3 bytes
                 shift = 18;
-                lead_byte = (Byte)(_4_BYTE_LEADER 
+                lead_byte = (byte)(_4_BYTE_LEADER 
                                         | LO_3_BITS(cp >> shift));
         } else {
                 // value to large to be legal Unicode
@@ -116,12 +116,12 @@ static void utf8_encode(unsigned cp, Bytes *bytes)
  * Validates a sequence of utf-8 bytes (1-4 bytes) and 
  * returns the byte length if valid, else -1
  */
-static int utf8_validate_sequence(CBytes bytes, size_t count) 
+static int utf8_validate_sequence(const byte *bytes, size_t count) 
 {
         unsigned codepoint;
         unsigned bar;
         unsigned cont;
-        Byte byte = *bytes++;
+        byte byte = *bytes++;
 
         if(IS_2_BYTE_LEADER(byte)) {
                 codepoint = LO_5_BITS(byte);
@@ -163,30 +163,11 @@ static int utf8_validate_sequence(CBytes bytes, size_t count)
         return (int)length;
 }
 
-
-/*
- * Validates a sequence of 1-4 utf-8 bytes 
- * If a string buffer is provided then the bytes are appended to it
- *
- * Returns 0 if valid and succeeds in writing bytes, otherwise -1
- */
-// static int write_utf8_sequence(Bytes bytes, size_t count, str_buf write_buf) 
-// {
-//         int len = valid_utf8_sequence(bytes, count);
-//
-//         if(len > 0 && write_buf) {
-//                 if(str_buf_append(write_buf, bytes, len))
-//                         return -1;
-//         }
-//
-//         return len;
-// }
-
 /*
  * Counts the number of characters that match the byte order mark
  * Returns the length of the BOM if all bytes match, or 0
  */
-static unsigned utf8_bom_bytes(Bytes bytes, size_t count)
+static unsigned utf8_bom_bytes(byte *bytes, size_t count)
 {
         static unsigned bom_count = sizeof(BYTE_ORDER_MARK) / sizeof(BYTE_ORDER_MARK[0]);
         return (count >= bom_count 
@@ -194,33 +175,3 @@ static unsigned utf8_bom_bytes(Bytes bytes, size_t count)
                         ? bom_count
                         : 0;
 }
-
-/*
- * Returns non-zero if the supplied byte is valid
- * as the first byte of a surrogate pair  
- */
-// static bool is_first_surrogate(Byte byte)
-// {
-//         return IS_1ST_SURROGATE(byte);
-// }
-//
-/*
- * Returns non-zero if the supplied byte is valid
- * as the second item of a surrogate pair  
- */
-// static bool is_second_surrogate(Byte byte)
-// {
-//         return IS_2ND_SURROGATE(byte);
-// }
-//
-/*
- * Combines a valid utf16 surrogate pair into a valid Unicode codepoint
- */
-// static int surrogate_pair_to_codepoint(int u1, int u2)
-// {
-//         // 110110yyyyyyyyyy 110111xxxxxxxxxx 
-//         // => 0x10000 + yyyyyyyyyyxxxxxxxxxx
-//         return SURROGATE_OFFSET 
-//                 + (SURROGATE_LO_BITS(u1) << 10) 
-//                 + SURROGATE_LO_BITS(u2);
-// }

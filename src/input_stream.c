@@ -1,18 +1,16 @@
 
-typedef struct memory_input_stream_s *MemoryInputStream;
-
-struct memory_input_stream_s {
-        Bytes start;
-        Bytes string;
-        Bytes read;
-        Bytes write;
-        Bytes mark;
+struct memory_input_stream {
+        byte *start;
+        byte *string;
+        byte *read;
+        byte *write;
+        byte *mark;
         size_t count;
 };
 
-static MemoryInputStream mis_new(Allocator a)
+static memory_input_stream *mis_new(allocator *a)
 {
-        MemoryInputStream mis = allocator_alloc(a, sizeof(struct memory_input_stream_s));
+        memory_input_stream *mis = allocator_alloc(a, sizeof(memory_input_stream));
 
         mis->count = 0;
         mis->start = NULL;
@@ -24,7 +22,7 @@ static MemoryInputStream mis_new(Allocator a)
         return mis;
 }
 
-static void mis_set_bytes(MemoryInputStream mis, Bytes bytes, size_t count)
+static void mis_set_bytes(memory_input_stream *mis, byte *bytes, size_t count)
 {
         mis->start = bytes;
         mis->read = bytes;
@@ -33,56 +31,45 @@ static void mis_set_bytes(MemoryInputStream mis, Bytes bytes, size_t count)
         mis->count = count;
 }
 
-static inline size_t mis_tell(MemoryInputStream mis)
+static inline size_t mis_tell(memory_input_stream *mis)
 {
         return (size_t)(mis->read - mis->start);
 }
 
-static inline void mis_adjust(MemoryInputStream mis, Bytes ptr)
+static inline void mis_adjust(memory_input_stream *mis, byte *ptr)
 {
         ASSERT(0 <= ptr - mis->start && ptr - mis->start <= (long)mis->count);
         mis->read = ptr;
 }
 
-static inline CBytes mis_at(MemoryInputStream mis, size_t pos)
+static inline const byte *mis_at(memory_input_stream *mis, size_t pos)
 {
         if(pos >= mis->count)
                 return NULL;
 
         return mis->start + pos;
 }
-//
-// static size_t mis_length(MemoryInputStream mis)
-// {
-//         return mis->count;
-// }
-//
-static inline bool mis_eof(MemoryInputStream mis)
+
+static inline bool mis_eof(memory_input_stream *mis)
 {
         ASSERT(mis_tell(mis) <= mis->count);
 
         return mis_tell(mis) == mis->count;
 }
 
-static inline Byte mis_peek(MemoryInputStream mis)
+static inline byte mis_peek(memory_input_stream *mis)
 {
-        // if(mis_eof(mis))
-        //         return '\0';
-
         return *mis->read;
 }
 
-static inline Byte mis_take(MemoryInputStream mis)
+static inline byte mis_take(memory_input_stream *mis)
 {
-        // if(mis_eof(mis))
-        //         return '\0';
-
         return *mis->read++;
 }
 
-static inline Byte mis_find(MemoryInputStream mis, Byte c)
+static inline byte mis_find(memory_input_stream *mis, byte c)
 {
-        Bytes p = (Bytes)strchr((const char *)mis->read,
+        byte *p = (byte *)strchr((const char *)mis->read,
                         (char)c);
         if(!p) {
                 mis->read = mis->start + mis->count;
@@ -92,7 +79,7 @@ static inline Byte mis_find(MemoryInputStream mis, Byte c)
         return *p;
 }
 
-static inline bool mis_consume(MemoryInputStream mis, Byte b)
+static inline bool mis_consume(memory_input_stream *mis, byte b)
 {
         if(*mis->read != b)
                 return false;
@@ -101,7 +88,7 @@ static inline bool mis_consume(MemoryInputStream mis, Byte b)
         return true;
 }
 
-static inline bool mis_validate_utf8(MemoryInputStream mis)
+static inline bool mis_validate_utf8(memory_input_stream *mis)
 {
         // Terminating \0 will halt utf8 validation if <4 chars
         int len = utf8_validate_sequence(mis->read, 4);
@@ -111,14 +98,14 @@ static inline bool mis_validate_utf8(MemoryInputStream mis)
         return true;
 }
 
-static inline void mis_string_start(MemoryInputStream mis)
+static inline void mis_string_start(memory_input_stream *mis)
 {
         mis->string = mis->read;
         mis->write = mis->read;
         mis->mark = mis->read;
 }
 
-static inline void mis_string_update(MemoryInputStream mis)
+static inline void mis_string_update(memory_input_stream *mis)
 {
         if(mis->mark != mis->write) {
                 size_t amt = (size_t)(mis->read - mis->mark);
@@ -131,22 +118,22 @@ static inline void mis_string_update(MemoryInputStream mis)
         }
 }
 
-static inline void mis_string_restart(MemoryInputStream mis)
+static inline void mis_string_restart(memory_input_stream *mis)
 {
         mis->mark = mis->read;
 }
 
-static inline Bytes *mis_writer(MemoryInputStream mis)
+static inline byte **mis_writer(memory_input_stream *mis)
 {
         return &mis->write;
 }
 
-static inline void mis_byte_copy(MemoryInputStream mis)
+static inline void mis_byte_copy(memory_input_stream *mis)
 {
         *mis->write++ = *mis->read++;
 }
 
-static inline size_t mis_string_complete(MemoryInputStream mis, Bytes *bytes)
+static inline size_t mis_string_complete(memory_input_stream *mis, byte **bytes)
 {
         size_t len;
 

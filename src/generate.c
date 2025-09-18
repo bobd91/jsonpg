@@ -1,7 +1,7 @@
 #include <assert.h>
 
 #ifndef NDEBUG
-static bool can_value(Generator g)
+static bool can_value(generator *g)
 {
         if(g->stack.size && stack_peek(&g->stack) == STACK_OBJECT) {
                 if(g->key_next) {
@@ -15,7 +15,7 @@ static bool can_value(Generator g)
 
 }
 
-static bool can_key(Generator g)
+static bool can_key(generator *g)
 {
         if(g->stack.size && !g->key_next) {
                 g->error = make_error(JSONPG_ERROR_EXPECTED_VALUE);
@@ -25,7 +25,7 @@ static bool can_key(Generator g)
         return true;
 }
 
-static bool can_push(Generator g, int type)
+static bool can_push(generator *g, int type)
 {
         if(!can_value(g))
                 return false;
@@ -40,7 +40,7 @@ static bool can_push(Generator g, int type)
         
 }
 
-static bool can_pop(Generator g, int type)
+static bool can_pop(generator *g, int type)
 {
         int cur_type;
         if(g->stack.size) {
@@ -64,90 +64,90 @@ static bool can_pop(Generator g, int type)
 }
 #endif  // ifndef NDEBUG
 
-bool jsonpg_null(Generator g)
+bool jsonpg_null(generator *g)
 {
         ASSERT(can_value(g));
 
         return (!g->callbacks->null) || g->callbacks->null(g->ctx);
 }
 
-bool jsonpg_boolean(Generator g, bool is_true)
+bool jsonpg_boolean(generator *g, bool is_true)
 {
         ASSERT(can_value(g));
 
         return  (!g->callbacks->boolean) || g->callbacks->boolean(g->ctx, is_true);
 }
 
-bool jsonpg_integer(Generator g, long integer)
+bool jsonpg_integer(generator *g, long integer)
 {
         ASSERT(can_value(g));
 
         return  (!g->callbacks->integer) || g->callbacks->integer(g->ctx, integer);
 }
 
-bool jsonpg_real(Generator g, double real)
+bool jsonpg_real(generator *g, double real)
 {
         ASSERT(can_value(g));
 
         return  (!g->callbacks->real) || g->callbacks->real(g->ctx, real);
 }
 
-bool jsonpg_string(Generator g, const unsigned char *bytes, size_t count)
+bool jsonpg_string(generator *g, const byte *bytes, size_t count)
 {
         ASSERT(can_value(g));
 
         return (!g->callbacks->string) || g->callbacks->string(g->ctx, bytes, count);
 }
 
-bool jsonpg_key(Generator g, const unsigned char *bytes, size_t count)
+bool jsonpg_key(generator *g, const byte *bytes, size_t count)
 {
         ASSERT(can_key(g));
 
         return (!g->callbacks->key) || g->callbacks->key(g->ctx, bytes, count);
 }
 
-bool jsonpg_start_array(Generator g)
+bool jsonpg_start_array(generator *g)
 {
         ASSERT(can_push(g, STACK_ARRAY));
 
         return  (!g->callbacks->start_array) ||g->callbacks->start_array(g->ctx);
 }
 
-bool jsonpg_end_array(Generator g)
+bool jsonpg_end_array(generator *g)
 {
         ASSERT(can_pop(g, STACK_ARRAY));
 
         return  (!g->callbacks->end_array) ||g->callbacks->end_array(g->ctx);
 }
 
-bool jsonpg_start_object(Generator g)
+bool jsonpg_start_object(generator *g)
 {
         ASSERT(can_push(g, STACK_OBJECT));
 
         return (!g->callbacks->start_object) ||g->callbacks->start_object(g->ctx);
 }
 
-bool jsonpg_end_object(Generator g)
+bool jsonpg_end_object(generator *g)
 {
         ASSERT(can_pop(g, STACK_OBJECT));
 
         return  (!g->callbacks->end_object) ||g->callbacks->end_object(g->ctx);
 }
 
-static Generator generator_reset(Generator g, unsigned flags)
+static generator *generator_reset(generator *g, unsigned flags)
 {
         g->count = 0;
         g->validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_OUT);
-        g->error = (ErrorInfo) {};
+        g->error = (error_info) {};
         return g;
 }
 
-static Generator generator_new(uint16_t stack_size, unsigned flags)
+static generator *generator_new(unsigned stack_size, unsigned flags)
 {
-        Allocator a = allocator_new();
+        allocator *a = allocator_new();
         if(!a)
                 return NULL;
-        Generator g = allocator_alloc(a, sizeof(generator_s)
+        generator *g = allocator_alloc(a, sizeof(generator)
                         + (stack_size >> 3));
         if(!g)
                 return NULL;
@@ -156,18 +156,18 @@ static Generator generator_new(uint16_t stack_size, unsigned flags)
         g->key_next = false;
         g->validate_utf8 = !(flags & JSONPG_ALLOW_INVALID_UTF8_OUT);
 
-        g->stack = (struct stack_s) {
+        g->stack = (stack) {
                 .ptr = 0,
                 .size = stack_size,
-                .stack = ((Byte *)g) + sizeof(generator_s)
+                .stack = ((byte *)g) + sizeof(generator)
         };
 
         return g;
 }
 
-static Generator generator_set_callbacks(
-                Generator g,
-                Callbacks *callbacks, 
+static generator *generator_set_callbacks(
+                generator *g,
+                callbacks *callbacks, 
                 void *ctx)
 {
         g->callbacks = callbacks;
@@ -175,7 +175,7 @@ static Generator generator_set_callbacks(
         return g;
 }
 
-void jsonpg_generator_free(Generator g)
+void jsonpg_generator_free(generator *g)
 {
         if(!g)
                 return;
@@ -183,7 +183,7 @@ void jsonpg_generator_free(Generator g)
         allocator_free(g->allocator);
 }
 
-Generator jsonpg_generator_new_opt(GeneratorOpts opts)
+generator *jsonpg_generator_new_opt(generator_opts opts)
 {
         unsigned flags = opts.allow;
 
@@ -192,7 +192,7 @@ Generator jsonpg_generator_new_opt(GeneratorOpts opts)
         
         unsigned indent = opts.indent <= 8 ? opts.indent : 8;
 
-        Generator g = generator_new(opts.max_nesting, flags);
+        generator *g = generator_new(opts.max_nesting, flags);
         if(!g)
                 return NULL;
 
@@ -204,7 +204,7 @@ Generator jsonpg_generator_new_opt(GeneratorOpts opts)
                 return json_generator(g, indent);
 }
 
-ErrorInfo jsonpg_result_error(Generator g)
+error_info jsonpg_result_error(generator *g)
 {
         return g->error;
 }

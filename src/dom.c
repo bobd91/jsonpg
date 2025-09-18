@@ -1,25 +1,25 @@
 #include <stdint.h>
 
 #define DOM_MIN_SIZE 8192
-#define NODE_SIZE (sizeof(struct dom_node_s))
+#define NODE_SIZE (sizeof(dom_node))
 
-typedef struct dom_node_s *DomNode;
+typedef struct dom_node dom_node;
 
-struct dom_node_s {
+struct dom_node {
         union {
-                JsonType type;
+                json_type type;
                 size_t count;
                 double real;
                 long integer;
-                Byte bytes[];
+                byte bytes[];
         } is;
 };
 
-static DomInfo dom_parser_info(Dom dom)
+static dom_info dom_parser_info(dom *root)
 {
-        DomInfo di;
-        di.hdr = dom;
-        di.offset = sizeof(dom_s);
+        dom_info di;
+        di.hdr = root;
+        di.offset = sizeof(dom);
         return di;
 }
 
@@ -39,11 +39,11 @@ static inline size_t dom_alloc_size(size_t size)
         return dom_size_align(size);
 }
 
-static Dom dom_hdr_new(Allocator a, size_t size)
+static dom *dom_hdr_new(allocator *a, size_t size)
 {
-        size = dom_alloc_size(size + sizeof(dom_s));
+        size = dom_alloc_size(size + sizeof(dom));
 
-        Dom hdr = allocator_alloc(a, size);
+        dom *hdr = allocator_alloc(a, size);
 
         if(!hdr)
                 return NULL;
@@ -51,17 +51,17 @@ static Dom dom_hdr_new(Allocator a, size_t size)
         hdr->next = NULL;
         hdr->current = NULL;
         hdr->size = size;
-        hdr->count = sizeof(dom_s);
+        hdr->count = sizeof(dom);
 
         return hdr;
 }
 
-static DomNode dom_node_next(Dom root, size_t count)
+static dom_node *dom_node_next(dom *root, size_t count)
 {
         size_t required = dom_size_align(count + 2 * NODE_SIZE);
-        Dom hdr = root->current;
+        dom *hdr = root->current;
         if(required > hdr->size - hdr->count) {
-                Dom new = dom_hdr_new(root->allocator, required);
+                dom *new = dom_hdr_new(root->allocator, required);
 
                 if(!new)
                         return NULL;
@@ -72,12 +72,12 @@ static DomNode dom_node_next(Dom root, size_t count)
         }
         size_t offset = hdr->count;
         hdr->count += required;
-        return (DomNode)(offset + (char *)hdr);
+        return (dom_node *)(offset + (char *)hdr);
 }
 
-static DomNode dom_add_type(Dom root, JsonType type, size_t count)
+static dom_node *dom_add_type(dom *root, json_type type, size_t count)
 {
-        DomNode node = dom_node_next(root, count);
+        dom_node *node = dom_node_next(root, count);
         if(!node)
                 return NULL;
         node->is.type = type;
@@ -87,9 +87,9 @@ static DomNode dom_add_type(Dom root, JsonType type, size_t count)
         return node;
 }
 
-static inline DomNode dom_add_integer(Dom root, long integer)
+static inline dom_node *dom_add_integer(dom *root, long integer)
 {
-        DomNode node = dom_add_type(root, JSONPG_INTEGER, NODE_SIZE);
+        dom_node *node = dom_add_type(root, JSONPG_INTEGER, NODE_SIZE);
         if(!node)
                 return NULL;
 
@@ -99,9 +99,9 @@ static inline DomNode dom_add_integer(Dom root, long integer)
         return node;
 }
 
-static inline DomNode dom_add_real(Dom root, double real)
+static inline dom_node *dom_add_real(dom *root, double real)
 {
-        DomNode node = dom_add_type(root, JSONPG_REAL, NODE_SIZE);
+        dom_node *node = dom_add_type(root, JSONPG_REAL, NODE_SIZE);
         if(!node)
                 return NULL;
 
@@ -111,9 +111,9 @@ static inline DomNode dom_add_real(Dom root, double real)
         return node;
 }
 
-static inline DomNode dom_add_bytes(Dom root, JsonType type, const unsigned char *bytes, size_t count)
+static inline dom_node *dom_add_bytes(dom *root, json_type type, const byte *bytes, size_t count)
 {
-        DomNode node = dom_add_type(root, type, count);
+        dom_node *node = dom_add_type(root, type, count);
         if(!node)
                 return NULL;
 
@@ -125,66 +125,66 @@ static inline DomNode dom_add_bytes(Dom root, JsonType type, const unsigned char
 
 static inline bool dom_boolean(void *ctx, bool is_true)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, is_true ? JSONPG_TRUE : JSONPG_FALSE, 0);
 }
 
 static inline bool dom_null(void *ctx)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, JSONPG_NULL, 0);
 }
 
 static inline bool dom_integer(void *ctx, long integer)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_integer(root, integer);
 }
 
 static inline bool dom_real(void *ctx, double real)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_real(root, real);
 }
 
-static inline bool dom_string(void *ctx, const unsigned char *bytes, size_t count)
+static inline bool dom_string(void *ctx, const byte *bytes, size_t count)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_bytes(root, JSONPG_STRING, bytes, count);
 }
 
-static inline bool dom_key(void *ctx, const unsigned char *bytes, size_t count)
+static inline bool dom_key(void *ctx, const byte *bytes, size_t count)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_bytes(root, JSONPG_KEY, bytes, count);
 }
 
 static inline bool dom_start_array(void *ctx)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, JSONPG_START_ARRAY, 0);
 }
 
 static inline bool dom_end_array(void *ctx)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, JSONPG_END_ARRAY, 0);
 }
 
 static inline bool dom_start_object(void *ctx)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, JSONPG_START_OBJECT, 0);
 }
 
 static inline bool dom_end_object(void *ctx)
 {
-        Dom root = ctx;
+        dom *root = ctx;
         return dom_add_type(root, JSONPG_END_OBJECT, 0);
 }
 
 
-static Callbacks dom_callbacks = {
+static callbacks dom_callbacks = {
         .boolean = dom_boolean,
         .null = dom_null,
         .integer = dom_integer,
@@ -197,9 +197,9 @@ static Callbacks dom_callbacks = {
         .end_object = dom_end_object,
 };
 
-static Dom dom_new(Allocator a, size_t size)
+static dom *dom_new(allocator *a, size_t size)
 {
-        Dom root = dom_hdr_new(a, size);
+        dom *root = dom_hdr_new(a, size);
         if(!root)
                 return NULL;
 
@@ -208,23 +208,23 @@ static Dom dom_new(Allocator a, size_t size)
         return root;
 }
 
-Dom jsonpg_result_dom(Generator g)
+dom *jsonpg_result_dom(generator *g)
 {
         return g->ctx;
 }
 
-static Generator dom_generator(Generator g)
+static generator *dom_generator(generator *g)
 {
-        Dom root = dom_new(g->allocator, 0);
+        dom *root = dom_new(g->allocator, 0);
         if(!root)
                 return NULL;
 
         return generator_set_callbacks(g, &dom_callbacks, root);
 }
 
-static JsonType dom_parse_next(Parser p)
+static json_type dom_parse_next(parser *p)
 {
-        Dom hdr = p->dom_info.hdr;
+        dom *hdr = p->dom_info.hdr;
         size_t offset = p->dom_info.offset;
 
         if(offset >= hdr->count) {
@@ -233,12 +233,12 @@ static JsonType dom_parse_next(Parser p)
                         p->result.type = JSONPG_EOF;
                         return JSONPG_EOF;
                 }
-                offset = sizeof(struct jsonpg_dom_s);
+                offset = sizeof(dom);
         }
 
-        DomNode node = (DomNode)(offset + (char *)hdr);
+        dom_node *node = (dom_node *)(offset + (char *)hdr);
         offset += NODE_SIZE;
-        JsonType type = node->is.type;
+        json_type type = node->is.type;
         node++;
         offset += NODE_SIZE;
         size_t count = node->is.count;
@@ -269,16 +269,16 @@ static JsonType dom_parse_next(Parser p)
         return type;
 }
 
-static ParseResult dom_parse(Parser p, Generator g)
+static parse_result dom_parse(parser *p, generator *g)
 {
-        Dom hdr = p->dom_info.hdr;
-        size_t offset = sizeof(dom_s);
+        dom *hdr = p->dom_info.hdr;
+        size_t offset = sizeof(dom);
         bool ok = true;
 
         while(hdr && ok) {
-                DomNode node = (DomNode)(offset + (char *)hdr);
+                dom_node *node = (dom_node *)(offset + (char *)hdr);
                 offset += NODE_SIZE;
-                JsonType type = node->is.type;
+                json_type type = node->is.type;
                 node++;
                 offset += NODE_SIZE;
                 size_t count = node->is.count;
@@ -338,7 +338,7 @@ static ParseResult dom_parse(Parser p, Generator g)
                 }
                 
                 if(offset >= hdr->count && ok) {
-                        offset = sizeof(struct jsonpg_dom_s);
+                        offset = sizeof(dom);
                         hdr = hdr->next;
                 }
         }
@@ -346,6 +346,6 @@ static ParseResult dom_parse(Parser p, Generator g)
         if(!ok)
                 return make_pg_error_return(p, g);
 
-        return (ParseResult) { .type = JSONPG_EOF };
+        return (parse_result) { .type = JSONPG_EOF };
 
 }
