@@ -1,3 +1,13 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * output.c
+ *   an abstraction over JSON translation and buffering
+ *   memory_output_stream handles buffering of the output
+ *   json_output_stream handles pretty printing, JSON escaping and utf8 validation
+ */
+
 #include <stddef.h>
 
 #define MOS_DEFAULT_CAPACITY 4096;
@@ -100,6 +110,7 @@ static inline void mos_adjust(memory_output_stream *mos, long amount)
         // Keeping compilers happy :(
         mos->count = (size_t)((long)(mos->count) + amount);
 }
+
 
 struct json_output_stream {
         memory_output_stream *mos;

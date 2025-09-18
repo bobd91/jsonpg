@@ -1,3 +1,12 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * input.c
+ *   an abstraction over the input data
+ *   allows modification of JSON strings as escapes are applied
+ *   provides validation of utf8 byte sequences
+ */
 
 struct memory_input_stream {
         byte *start;
@@ -26,8 +35,6 @@ static void mis_set_bytes(memory_input_stream *mis, byte *bytes, size_t count)
 {
         mis->start = bytes;
         mis->read = bytes;
-        mis->write = bytes;
-        mis->mark = bytes;
         mis->count = count;
 }
 
@@ -69,8 +76,7 @@ static inline byte mis_take(memory_input_stream *mis)
 
 static inline byte mis_find(memory_input_stream *mis, byte c)
 {
-        byte *p = (byte *)strchr((const char *)mis->read,
-                        (char)c);
+        byte *p = (byte *)strchr((const char *)mis->read, (char)c);
         if(!p) {
                 mis->read = mis->start + mis->count;
                 return '\0';

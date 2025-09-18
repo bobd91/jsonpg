@@ -1,3 +1,13 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * types.h
+ *   structs and typedefs used throughout the project
+ *   aliases types from the public api so we dont have to prefix
+ *   everything with jsonpg_
+ */
+
 #pragma once
 
 #include <stdint.h>
@@ -20,8 +30,6 @@ typedef jsonpg_parser_opts              parser_opts;
 typedef jsonpg_parse_opts               parse_opts;
 typedef jsonpg_generator_opts           generator_opts;
 
-
-// Shared project structures and typedefs
 
 typedef unsigned char                   byte;
 

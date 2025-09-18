@@ -1,6 +1,8 @@
 // See LICENCE
 //
-// Portions converted to C from RapidJSON C++
+// Converted to C from C++
+//
+// https://github.com/Tencent/rapidjson/blob/master/include/rapidjson/internal/itoa.h
 // 
 // Tencent is pleased to support the open source community by making RapidJSON available.
 //

@@ -1,4 +1,12 @@
 /*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * parse.c
+ *   the main JSON parse loop
+ */
+
+/*
  * Use the parser to parse JSON values and pass the results to the generator 
  * 
  * Given the nested nature of JSON it would make sense to parse 
@@ -6,7 +14,7 @@
  * with deeply nested input.
  *
  * This implementation flattens the parse into a loop with the nesting
- * levels being tracked in a bit stack (1/0 aray/object)
+ * levels being tracked in a bit stack (1/0 array/object)
  *
  * The result is fairly complex but the outline of the loop is:
  *

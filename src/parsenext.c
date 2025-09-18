@@ -1,6 +1,12 @@
 /*
- * These functions provide the pull parse functionality.
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
  *
+ * parsenext.c
+ *   pull parser fucntionality
+ */
+
+/*
  * As a pull parser returns one JSON item at a time it needs to keep track of 
  * where it is up to so that it can resume when next called.
  *

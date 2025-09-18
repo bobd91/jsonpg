@@ -1,3 +1,8 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ */
+
 #pragma once
 
 static generator *generator_new(unsigned, unsigned);

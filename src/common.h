@@ -1,4 +1,10 @@
-
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * common.h
+ *   shared macros
+ */
 #include <assert.h>
 
 #define ASSERT(X)   assert(X)

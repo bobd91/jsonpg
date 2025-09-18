@@ -1,12 +1,17 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * parser.c
+ *   provides parsing functionality shared by the sax/event style parser
+ *   and the pull parser
+ */
+
 #include <setjmp.h>
 #include <limits.h>
 #include <float.h>
 #include <string.h>
 #include <stdarg.h>
-
-#include "fast_double_parser.h"
-
-// parser functions used by parse.c and parse_next.c
 
 #define MIN_STACK_SIZE 1024
 

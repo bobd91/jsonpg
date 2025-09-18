@@ -1,3 +1,15 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * generate.c
+ *   provides a dual role
+ *   1 - delivers parse events from parser to user provided callback
+ *   2 - delivers user generated events to produce JSON output
+ *
+ *   during development/testing it will assert() that the events make
+ *   a valid JSON document (for example,  [2} will be rejected)
+ */
 #include <assert.h>
 
 #ifndef NDEBUG

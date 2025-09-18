@@ -1,3 +1,12 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * stack.c
+ *   maintains a bit stack of nested array/objects
+ *   a 1 indicates an array in the stack, a 0 an object
+ */
+
 #include <stdint.h>
 
 static inline int stack_peek(stack *s)

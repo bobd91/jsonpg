@@ -1,3 +1,16 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * dom.c
+ *   some json parse test frameworks require a dom style parse
+ *   this is a minimal implementation which just
+ *   stores parse results in memory so that they can be replayed
+ *
+ *   dom_generator creates the in memory data structure
+ *   dom_parse/dom_parse_next replay the data as if from a regular parse
+ */
+
 #include <stdint.h>
 
 #define DOM_MIN_SIZE 8192

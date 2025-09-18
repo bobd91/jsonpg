@@ -1,6 +1,14 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * error.c
+ *   create error information for parser/generator
+ */
+
 #include <stdio.h>
 
-static const char * error_msgs[] = {
+static const char *error_msgs[] = {
         [JSONPG_ERROR_OPT]              = "Invalid option",
         [JSONPG_ERROR_ALLOC]            = "Out of memory",
         [JSONPG_ERROR_NUMBER]           = "Invalid number",

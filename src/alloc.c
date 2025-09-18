@@ -1,3 +1,12 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * alloc.c
+ *   allows users to provide low level malloc/realloc/free functions
+ *   provides arena like allocator for parsers/generators
+ */
+
 #include <stdlib.h>
 #include <string.h>
 

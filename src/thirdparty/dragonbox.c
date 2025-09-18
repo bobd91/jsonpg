@@ -1,6 +1,8 @@
 // See LICENSE
 //
-// C rewrite of https://github.com/abolz/Drachennest/src/dragonbox.cc
+// Converted to C from C++
+//
+// https://github.com/abolz/Drachennest/src/dragonbox.cc
 //
 // Copyright 2020 Junekey Jeon
 // Copyright 2020 Alexander Bolz

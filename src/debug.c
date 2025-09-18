@@ -1,3 +1,10 @@
+/*
+ * jsonpg - a JSON parser/generator
+ * © 2025 Bob Davison (see also: LICENSE)
+ *
+ * debug.c
+ *   debug logging macros
+ */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
